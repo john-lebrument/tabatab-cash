@@ -11,7 +11,7 @@ Pour chaque nouvelle version :
 1. Incrémenter `src/version.py` et `resources/version_info.txt`, sans remplacer une version existante.
 2. Documenter le comportement dans `README.md` et `CHANGELOG.md`.
 3. Vérifier les changements avec les tests pertinents, puis la suite complète.
-4. Compiler avec `.venv/Scripts/python.exe build_portable.py --no-publish`. Les anciennes versions locales restent conservées.
+4. Compiler avec `.venv/Scripts/python.exe build_portable.py` pour déposer aussi la version complète dans le dossier OneDrive habituel `Setup 1D/__Last version`. Vérifier la copie. Les anciennes versions dans le projet restent conservées. Si `--no-publish` est utilisé pour une compilation particulière, effectuer ensuite le dépôt OneDrive séparément avant de terminer la tâche.
 5. Commiter les sources et pousser sur `origin`.
 6. Exécuter `.venv/Scripts/python.exe publish_release.py --notes <fichier Markdown des notes de cette version>`.
 7. Vérifier sur GitHub le commit, le tag, la release et ses deux fichiers (ZIP compilé et SHA-256). Fournir le lien de la release à l'utilisateur.
