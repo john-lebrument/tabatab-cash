@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+data/
+dist/
+build/
+release/
+artifacts/
+backups/
+*_Portable*/
+qa_*.png
+.env
+.env.*
+work/
