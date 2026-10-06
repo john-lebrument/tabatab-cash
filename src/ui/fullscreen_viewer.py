@@ -581,7 +581,11 @@ class FullscreenImageViewer(QWidget):
         total = len(self.image_list)
         remaining = max(0, total - self.current_index - 1)
         suffix = 'image restante' if remaining == 1 else 'images restantes'
-        self.counter.setText(f'{self.current_index + 1} / {total}\n{remaining} {suffix}')
+        name = Path(self.image_list[self.current_index]).name if 0 <= self.current_index < total else ''
+        metrics = self.counter.fontMetrics()
+        self.counter.setText(f'{self.current_index + 1} / {total}\n{remaining} {suffix}\n'
+                             + metrics.elidedText(name, Qt.TextElideMode.ElideMiddle, max(120, self.width() - 80)))
+        self.counter.setToolTip(name)
         if self.floating:
             self.counter.hide()
             return
@@ -589,6 +593,7 @@ class FullscreenImageViewer(QWidget):
         self.counter.move(20, 20)
         self.counter.show()
         self.counter.raise_()
+        self._position_zoom_badge()
 
     def fit_to_screen(self):
         if not self.current_pixmap or self.current_pixmap.isNull():
@@ -635,7 +640,7 @@ class FullscreenImageViewer(QWidget):
     def _position_zoom_badge(self):
         if hasattr(self, 'zoom_badge'):
             self.zoom_badge.adjustSize()
-            self.zoom_badge.move(max(0, self.width() - self.zoom_badge.width() - 20), 20)
+            self.zoom_badge.move(20, self.counter.y() + self.counter.height() + 4)
 
     def rename_current_image(self):
         if not (0 <= self.current_index < len(self.image_list)):

@@ -57,6 +57,7 @@ class FeaturesV23(unittest.TestCase):
         tree.dragMoveEvent(move)
         self.assertFalse(tree.isExpanded(index))
         QTest.qWait(850)
+        index = self.tab.tree_model.index(str(folder))
         self.assertTrue(tree.isExpanded(index))
         self.assertEqual(Path(self.tab.current_folder), self.root)
         tree.collapse(index)
@@ -64,6 +65,7 @@ class FeaturesV23(unittest.TestCase):
         tree.dragMoveEvent(move)
         tree.dragLeaveEvent(QDragLeaveEvent())
         QTest.qWait(800)
+        index = self.tab.tree_model.index(str(folder))
         self.assertFalse(tree.isExpanded(index))
 
     def test_tree_stationary_drag_scrolls_both_directions_and_stops(self):

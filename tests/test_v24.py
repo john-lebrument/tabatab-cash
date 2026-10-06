@@ -71,6 +71,7 @@ class FeaturesV24(unittest.TestCase):
             index = self.tab.tree_model.index(str(folder))
             tree.scrollTo(index)
             self.app.processEvents()
+            index = self.tab.tree_model.index(str(folder))
             self.tab._show_tree_context_menu(tree.visualRect(index).center())
         self.assertEqual(len(seen), 2)
         self.assertEqual(self.config.get('custom_favorites'), [str(folder)])

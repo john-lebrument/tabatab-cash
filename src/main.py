@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QApplication
 from src.config import ConfigManager
 from src.ui.main_window import MainWindow
 from src.version import APP_NAME
+from src.utils.instance_broker import InstanceBroker, launch_arguments
 
 
 def get_resource_path(rel_path: str) -> Path:
@@ -27,6 +28,11 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_NAME)
+    path, force_new = launch_arguments(sys.argv[1:])
+    broker = InstanceBroker(app)
+    if not broker.start(path, force_new):
+        return
+    app.aboutToQuit.connect(broker.close)
     if sys.platform == 'win32':
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('TABaTABCash.Viewer')
@@ -41,10 +47,22 @@ def main():
     if icon_path.exists():
         window.setWindowIcon(QIcon(str(icon_path)))
     window.show()
-    if len(sys.argv) > 1:
-        argument = sys.argv[1]
-        path = QUrl(argument).toLocalFile() if argument.startswith('file:') else argument
-        QTimer.singleShot(0, lambda: window.open_external_image(path))
+    def open_image(image):
+        viewer = window.fullscreen_viewer
+        if viewer and viewer.isVisible() and not viewer._confirm_rotation():
+            return
+        window.open_external_image(image)
+        target = window.fullscreen_viewer or window
+        if target.isMinimized():
+            target.showNormal()
+            if target is window.fullscreen_viewer:
+                target.showFullScreen()
+        target.raise_()
+        target.activateWindow()
+
+    broker.image_requested.connect(open_image)
+    if path:
+        QTimer.singleShot(0, lambda: open_image(path))
 
     sys.exit(app.exec())
 

@@ -16,4 +16,6 @@ Pour chaque nouvelle version :
 6. Exécuter `.venv/Scripts/python.exe publish_release.py --notes <fichier Markdown des notes de cette version>`.
 7. Vérifier sur GitHub le commit, le tag, la release et ses deux fichiers (ZIP compilé et SHA-256). Fournir le lien de la release à l'utilisateur.
 
+La dernière version doit remplacer les anciennes distributions de TABaTAB dans le dossier OneDrive de dernière version, après vérification de la copie. Si TABaTAB est déjà enregistré dans Windows, actualiser le chemin de son exécutable enregistré pour éviter que l'Explorateur ne pointe vers une ancienne version supprimée ; ne pas modifier les choix d'applications par défaut (`UserChoice`).
+
 Ne jamais envoyer les préférences personnelles (`data/settings.json`), sauvegardes ou anciens exécutables dans Git. L'archive GitHub est créée sans préférences personnelles par `publish_release.py`. Si GitHub est déconnecté, terminer et vérifier le travail local puis demander uniquement la connexion nécessaire, sans annoncer une publication réussie.

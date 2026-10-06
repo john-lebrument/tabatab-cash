@@ -1,8 +1,8 @@
 import os
 import string
 from pathlib import Path
-from PyQt6.QtCore import QDir, QModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer
-from PyQt6.QtGui import QFileSystemModel, QIcon, QFont, QDrag, QKeySequence
+from PyQt6.QtCore import QDir, QModelIndex, QPersistentModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer, QEvent, QRect
+from PyQt6.QtGui import QIcon, QFont, QDrag, QKeySequence, QColor
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QAbstractItemView,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
 )
 
 from src.ui.thumbnail_view import ThumbnailView
@@ -31,10 +33,32 @@ from src.ui.breadcrumb_bar import BreadcrumbBar
 from src.ui.folder_actions import create_folder, delete_folders
 from src.utils.file_ops import rename_folder
 from src.utils.favorites import export_favorites, import_favorites
+from src.ui.folder_model import FolderModel
+
+
+class FavoriteDelegate(QStyledItemDelegate):
+    @staticmethod
+    def close_rect(rect):
+        return QRect(rect.right() - 23, rect.top(), 24, rect.height())
+
+    def paint(self, painter, option, index):
+        text_option = QStyleOptionViewItem(option)
+        text_option.rect.setRight(option.rect.right() - 24)
+        super().paint(painter, text_option, index)
+        painter.save()
+        painter.setPen(QColor('#ff5252'))
+        font = QFont(option.font)
+        font.setPixelSize(20)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(self.close_rect(option.rect), Qt.AlignmentFlag.AlignCenter, '×')
+        painter.restore()
 
 
 class FavoritesList(QListWidget):
     order_changed = pyqtSignal()
+    files_dropped = pyqtSignal(list, str, bool)
+    remove_requested = pyqtSignal(str)
     paste_requested = pyqtSignal(str)
 
     def keyPressEvent(self, event):
@@ -51,8 +75,84 @@ class FavoritesList(QListWidget):
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setDragDropOverwriteMode(False)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setItemDelegate(FavoriteDelegate(self))
+        self._drop_item = None
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.position().toPoint())
+        if (event.button() == Qt.MouseButton.LeftButton and item
+                and FavoriteDelegate.close_rect(self.visualItemRect(item)).contains(event.position().toPoint())):
+            path = item.data(ROLE_PATH)
+            self.remove_requested.emit(path)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def viewportEvent(self, event):
+        if event.type() in (QEvent.Type.DragEnter, QEvent.Type.DragMove, QEvent.Type.Drop) and event.mimeData().hasUrls():
+            handlers = {QEvent.Type.DragEnter: self.dragEnterEvent,
+                        QEvent.Type.DragMove: self.dragMoveEvent, QEvent.Type.Drop: self.dropEvent}
+            handlers[event.type()](event)
+            return True
+        return super().viewportEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.setDropAction(drop_action(event))
+            event.accept()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if not event.mimeData().hasUrls():
+            super().dragMoveEvent(event)
+            return
+        item = self.itemAt(event.position().toPoint())
+        self._drop_item = item if item and Path(item.data(ROLE_PATH)).is_dir() else None
+        self.viewport().update()
+        if self._drop_item:
+            event.setDropAction(drop_action(event))
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._drop_item = None
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._drop_item:
+            paint_destination(self.viewport(), self.visualItemRect(self._drop_item))
 
     def dropEvent(self, event):
+        self._drop_item = None
+        self.viewport().update()
+        if event.mimeData().hasUrls():
+            item = self.itemAt(event.position().toPoint())
+            if not item or not Path(item.data(ROLE_PATH)).is_dir():
+                event.ignore()
+                return
+            paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+            paths = [path for path in paths if Path(path).is_file() or Path(path).is_dir()]
+            if not paths:
+                event.ignore()
+                return
+            destination = item.data(ROLE_PATH)
+            copy = drop_action(event) == Qt.DropAction.CopyAction
+            if not copy and all(Path(path).parent.resolve() == Path(destination).resolve() for path in paths):
+                event.ignore()
+                return
+            if isinstance(event.source(), ThumbnailView):
+                event.source()._pending_internal_drop = (paths, destination, copy)
+            else:
+                self.files_dropped.emit(paths, destination, copy)
+            event.setDropAction(Qt.DropAction.CopyAction if copy else Qt.DropAction.MoveAction)
+            event.accept()
+            return
         if event.source() is not self:
             event.ignore()
             return
@@ -84,7 +184,7 @@ class FolderTree(QTreeView):
         self.setAcceptDrops(True)
         self.setDragEnabled(True)
         self.setDropIndicatorShown(True)
-        self._drop_index = QModelIndex()
+        self._drop_index = QPersistentModelIndex()
         self.setAutoScroll(False)
         self._drag_position = None
         self._expand_timer = QTimer(self)
@@ -100,7 +200,7 @@ class FolderTree(QTreeView):
         index = self.indexAt(position)
         if index != self._drop_index:
             self._expand_timer.stop()
-            self._drop_index = index
+            self._drop_index = QPersistentModelIndex(index)
             if index.isValid() and not self.isExpanded(index):
                 self._expand_timer.start()
         self.viewport().update()
@@ -113,7 +213,7 @@ class FolderTree(QTreeView):
     def _expand_hovered_folder(self):
         if self._drag_position is not None and self._drop_index.isValid():
             if self.indexAt(self._drag_position) == self._drop_index:
-                self.expand(self._drop_index)
+                self.expand(QModelIndex(self._drop_index))
 
     def _scroll_drag(self):
         if self._drag_position is None:
@@ -129,7 +229,7 @@ class FolderTree(QTreeView):
         self._expand_timer.stop()
         self._scroll_timer.stop()
         self._drag_position = None
-        self._drop_index = QModelIndex()
+        self._drop_index = QPersistentModelIndex()
         self.viewport().update()
 
     def startDrag(self, supported_actions):
@@ -168,7 +268,7 @@ class FolderTree(QTreeView):
     def paintEvent(self, event):
         super().paintEvent(event)
         if self._drop_index.isValid():
-            rect = self.visualRect(self._drop_index)
+            rect = self.visualRect(QModelIndex(self._drop_index))
             rect.setLeft(0)
             rect.setRight(self.viewport().width() - 1)
             paint_destination(self.viewport(), rect)
@@ -371,6 +471,8 @@ class BrowserTabWidget(QWidget):
         # Favorites ListWidget
         self.fav_list = FavoritesList(left_widget)
         self.fav_list.order_changed.connect(self._save_favorite_order)
+        self.fav_list.files_dropped.connect(self._on_files_dropped)
+        self.fav_list.remove_requested.connect(self.remove_custom_favorite)
         self.fav_list.setObjectName("favoritesList")
         self.fav_list.setMaximumHeight(180)
         self.fav_list.setSpacing(1)
@@ -386,7 +488,7 @@ class BrowserTabWidget(QWidget):
         left_layout.addWidget(lbl_tree)
 
         # Folder Tree View
-        self.tree_model = QFileSystemModel()
+        self.tree_model = FolderModel(self)
         self.tree_model.setRootPath(QDir.rootPath())
         self.tree_model.setFilter(QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives)
 
