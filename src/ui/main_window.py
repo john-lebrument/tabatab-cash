@@ -389,6 +389,7 @@ class MainWindow(QMainWindow):
         tab.thumbnail_size_saved.connect(self._on_thumbnail_size_saved)
         tab.open_in_new_tab_requested.connect(lambda p: self.add_tab(p, switch_to=True))
         tab.favorites_updated.connect(self._on_favorites_updated)
+        tab.thumb_view.clipboard_image_saved.connect(self._on_clipboard_image_saved)
 
         if switch_to:
             self.tab_widget.setCurrentIndex(idx)
@@ -401,6 +402,15 @@ class MainWindow(QMainWindow):
             tab = self.tab_widget.widget(i)
             if isinstance(tab, BrowserTabWidget):
                 tab._populate_favorites()
+                tab._update_fav_star_button()
+
+    def _on_clipboard_image_saved(self, path):
+        for i in range(self.tab_widget.count()):
+            tab = self.tab_widget.widget(i)
+            if isinstance(tab, BrowserTabWidget) and Path(tab.current_folder) == Path(path).parent:
+                tab.refresh()
+                tab.thumb_view.select_path(path)
+        self.status_bar.showMessage(f'Image collée : {Path(path).name}', 3000)
 
     def _on_thumbnail_size_saved(self, size: int):
         self.config.set("thumbnail_size", size)

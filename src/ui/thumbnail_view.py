@@ -77,8 +77,10 @@ class ThumbnailView(QListWidget):
     folder_double_clicked = pyqtSignal(str)
     open_in_new_tab_requested = pyqtSignal(str)
     add_favorite_requested = pyqtSignal(str)
+    sort_requested = pyqtSignal(str, str)
     image_deleted = pyqtSignal(str)
     image_restored = pyqtSignal(str)
+    clipboard_image_saved = pyqtSignal(str)
     images_renamed = pyqtSignal(list)
     folder_renamed = pyqtSignal(str, str)
     folder_created = pyqtSignal(str)
@@ -262,7 +264,25 @@ class ThumbnailView(QListWidget):
                 target_folder = current.data(ROLE_PATH)
             else:
                 target_folder = self.current_folder
-        if not target_folder or mime is None or not mime.hasUrls():
+        if not target_folder or mime is None:
+            return
+        if not Path(target_folder).is_dir():
+            QMessageBox.warning(self, 'Collage impossible', 'Le dossier de destination est inaccessible.')
+            return
+        if not mime.hasUrls():
+            if mime.hasImage():
+                image = QApplication.clipboard().image()
+                if image.isNull():
+                    return
+                destination = Path(target_folder) / 'Image collée.png'
+                number = 1
+                while destination.exists():
+                    destination = Path(target_folder) / f'Image collée ({number}).png'
+                    number += 1
+                if not image.save(str(destination), 'PNG'):
+                    QMessageBox.warning(self, 'Collage impossible', "Impossible d'enregistrer l'image dans ce dossier.")
+                else:
+                    self.clipboard_image_saved.emit(str(destination))
             return
         paths = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
         paths = [p for p in paths if Path(p).is_file() and is_media_file(p)]
@@ -698,10 +718,27 @@ class ThumbnailView(QListWidget):
         if errors:
             QMessageBox.warning(self, 'Rotation incomplète', '\n'.join(errors))
 
+    def _add_sort_menu(self, menu):
+        submenu = menu.addMenu('Trier les miniatures')
+        for label, key in [('Nom', 'name'), ('Date de modification', 'date'),
+                           ('Date de création', 'created'), ('Taille du fichier', 'size'),
+                           ('Type de fichier', 'type')]:
+            action = submenu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(self.sort_by == key)
+            action.triggered.connect(lambda checked=False, key=key: self.sort_requested.emit(key, self.sort_order))
+        submenu.addSeparator()
+        for label, order in [('Croissant ↑', 'asc'), ('Décroissant ↓', 'desc')]:
+            action = submenu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(self.sort_order == order)
+            action.triggered.connect(lambda checked=False, order=order: self.sort_requested.emit(self.sort_by, order))
+
     def _show_context_menu(self, pos: QPoint):
         item = self.itemAt(pos)
         if not item:
             menu = QMenu(self)
+            self._add_sort_menu(menu)
             menu.addAction('Nouveau dossier…').triggered.connect(self._create_folder)
             paste = menu.addAction('Coller dans le dossier actuel (Ctrl+V)')
             paste.triggered.connect(self.paste_images)
@@ -714,9 +751,18 @@ class ThumbnailView(QListWidget):
         file_path = item.data(ROLE_PATH)
         is_folder = item.data(ROLE_IS_FOLDER)
         menu = QMenu(self)
+        self._add_sort_menu(menu)
         menu.addAction('Nouveau dossier…').triggered.connect(self._create_folder)
         if not is_folder:
             menu.addAction('Copier (Ctrl+C)').triggered.connect(self.copy_selected)
+            destinations = self.favorites_provider() if hasattr(self, 'favorites_provider') else []
+            if destinations:
+                favorites_menu = menu.addMenu('Copier dans un dossier favori')
+                for label, destination in destinations:
+                    action = favorites_menu.addAction(label)
+                    action.setToolTip(destination)
+                    action.triggered.connect(lambda checked=False, destination=destination:
+                        self.files_dropped.emit(self.get_selected_file_paths(), destination, True))
             menu.addAction('Couper (Ctrl+X)').triggered.connect(self.cut_selected)
             menu.addAction('Renommer (F2)').triggered.connect(self._rename_selected)
         if is_folder:

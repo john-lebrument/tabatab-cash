@@ -2,7 +2,7 @@ import os
 import string
 from pathlib import Path
 from PyQt6.QtCore import QDir, QModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer
-from PyQt6.QtGui import QFileSystemModel, QIcon, QFont, QDrag
+from PyQt6.QtGui import QFileSystemModel, QIcon, QFont, QDrag, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -30,10 +30,21 @@ from src.ui.drag_feedback import drop_action, paint_destination, set_large_drag_
 from src.ui.breadcrumb_bar import BreadcrumbBar
 from src.ui.folder_actions import create_folder, delete_folders
 from src.utils.file_ops import rename_folder
+from src.utils.favorites import export_favorites, import_favorites
 
 
 class FavoritesList(QListWidget):
     order_changed = pyqtSignal()
+    paste_requested = pyqtSignal(str)
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Paste):
+            item = self.currentItem()
+            if item:
+                self.paste_requested.emit(item.data(ROLE_PATH))
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -348,6 +359,13 @@ class BrowserTabWidget(QWidget):
         fav_header.addWidget(lbl_fav)
         fav_header.addStretch()
         fav_header.addWidget(btn_add_fav)
+        self.btn_favorites_menu = QPushButton('⋯', left_widget)
+        self.btn_favorites_menu.setToolTip('Importer ou exporter les favoris')
+        self.btn_favorites_menu.setFixedWidth(30)
+        favorites_menu = QMenu(self.btn_favorites_menu)
+        self._add_favorites_exchange_actions(favorites_menu)
+        self.btn_favorites_menu.setMenu(favorites_menu)
+        fav_header.addWidget(self.btn_favorites_menu)
         left_layout.addLayout(fav_header)
 
         # Favorites ListWidget
@@ -391,6 +409,9 @@ class BrowserTabWidget(QWidget):
 
         # Right: Thumbnail Grid
         self.thumb_view = ThumbnailView(self.thumbnail_manager, self.splitter)
+        self.thumb_view.favorites_provider = self._favorite_destinations
+        self.thumb_view.sort_requested.connect(self._set_sort_from_menu)
+        self.fav_list.paste_requested.connect(self.thumb_view.paste_images)
         self.thumb_view.show_videos = self.btn_videos.isChecked()
         self.btn_videos.toggled.connect(self._toggle_videos)
         self.thumb_view.setThumbnailSize(self.current_thumb_size)
@@ -425,6 +446,49 @@ class BrowserTabWidget(QWidget):
         if self.config:
             self.config.set('sort_by', criterion)
             self.config.set('sort_order', order)
+
+    def _set_sort_from_menu(self, criterion, order):
+        self.combo_sort.blockSignals(True)
+        self.combo_order.blockSignals(True)
+        self.combo_sort.setCurrentIndex(self.combo_sort.findData(criterion))
+        self.combo_order.setCurrentIndex(self.combo_order.findData(order))
+        self.combo_sort.blockSignals(False)
+        self.combo_order.blockSignals(False)
+        self._on_sort_changed()
+
+    def _favorite_destinations(self):
+        return [(self.fav_list.item(i).text(), self.fav_list.item(i).data(ROLE_PATH))
+                for i in range(self.fav_list.count())
+                if Path(self.fav_list.item(i).data(ROLE_PATH)).is_dir()]
+
+    def _add_favorites_exchange_actions(self, menu):
+        menu.addAction('Exporter les favoris…').triggered.connect(self.export_favorites)
+        menu.addAction('Importer les favoris…').triggered.connect(self.import_favorites)
+
+    def export_favorites(self):
+        if not self.config:
+            return
+        filename, _ = QFileDialog.getSaveFileName(self, 'Exporter les favoris', 'TABaTAB_favoris.json', 'Favoris JSON (*.json)')
+        if filename:
+            try:
+                export_favorites(self.config, filename)
+            except OSError as error:
+                QMessageBox.warning(self, 'Export impossible', str(error))
+
+    def import_favorites(self):
+        if not self.config:
+            return
+        filename, _ = QFileDialog.getOpenFileName(self, 'Importer les favoris', '', 'Favoris JSON (*.json)')
+        if filename:
+            try:
+                import_favorites(self.config, filename)
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(self, 'Import impossible', str(error))
+                return
+            self.favorites_updated.emit()
+            self._populate_favorites()
+            self._update_fav_star_button()
+            QMessageBox.information(self, 'Favoris importés', 'Les favoris ont été ajoutés sans doublons. Les dossiers inaccessibles sont conservés et apparaîtront lorsqu’ils seront disponibles.')
 
     def _show_tree_context_menu(self, pos):
         index = self.tree_view.indexAt(pos)
@@ -478,7 +542,7 @@ class BrowserTabWidget(QWidget):
         custom_favs = self.config.get("custom_favorites", []) if self.config else []
         for fav_path in custom_favs:
             p = Path(fav_path)
-            if p.exists():
+            if p.is_dir():
                 item = QListWidgetItem(f"⭐ {p.name}")
                 item.setToolTip(fav_path)
                 item.setData(ROLE_PATH, str(p.resolve()))
@@ -543,6 +607,9 @@ class BrowserTabWidget(QWidget):
     def _show_fav_context_menu(self, pos):
         item = self.fav_list.itemAt(pos)
         if not item:
+            menu = QMenu(self)
+            self._add_favorites_exchange_actions(menu)
+            menu.exec(self.fav_list.viewport().mapToGlobal(pos))
             return
 
         path = item.data(ROLE_PATH)
@@ -555,6 +622,15 @@ class BrowserTabWidget(QWidget):
         act_new_tab = menu.addAction("➕ Ouvrir dans un nouvel onglet")
         act_new_tab.triggered.connect(lambda: self.open_in_new_tab_requested.emit(path))
 
+        copy = menu.addAction('Copier les images sélectionnées dans ce dossier')
+        copy.setEnabled(bool(self.thumb_view.get_selected_file_paths()))
+        copy.triggered.connect(lambda: self.files_dropped.emit(
+            [p for p in self.thumb_view.get_selected_file_paths() if Path(p).is_file()], path, True))
+        paste = menu.addAction('Coller dans ce dossier (Ctrl+V)')
+        mime = QApplication.clipboard().mimeData()
+        paste.setEnabled(mime is not None and (mime.hasUrls() or mime.hasImage()))
+        paste.triggered.connect(lambda: self.thumb_view.paste_images(path))
+
         menu.addSeparator()
 
         act_remove = menu.addAction("🗑 Retirer des favoris")
@@ -562,6 +638,9 @@ class BrowserTabWidget(QWidget):
 
         act_copy = menu.addAction("📋 Copier le chemin")
         act_copy.triggered.connect(lambda: QApplication.clipboard().setText(path))
+
+        menu.addSeparator()
+        self._add_favorites_exchange_actions(menu)
 
         menu.exec(self.fav_list.mapToGlobal(pos))
 

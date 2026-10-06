@@ -159,3 +159,9 @@ La release contient le ZIP Windows x64 complet et son empreinte SHA-256. Les pr�
 ```powershell
 python build_portable.py --no-publish --clean-settings
 ```
+
+## Version 2.5
+
+- Clic droit dans la grille, sur une miniature ou dans un espace vide → **Trier les miniatures** : nom, date de modification, date de création, taille ou type, avec ordre croissant/décroissant. Le menu et la barre de tri restent synchronisés ; le choix est mémorisé.
+- Bouton **⋯** à côté de FAVORIS, ou clic droit dans la liste → **Exporter les favoris… / Importer les favoris…**. Le fichier JSON contient les chemins, leur ordre et les raccourcis masqués, sans copier le contenu des dossiers. L’import ajoute les favoris sans doublons et conserve les chemins temporairement inaccessibles.
+- Clic droit sur une image → **Copier dans un dossier favori**. Clic droit sur un favori → **Copier les images sélectionnées dans ce dossier** ou **Coller dans ce dossier (Ctrl+V)**. Ctrl+V fonctionne aussi lorsque la liste des favoris a le focus. Copier/couper depuis TABaTAB ou l’Explorateur Windows puis coller respecte les collisions sans écraser les fichiers. Une image brute du presse-papiers est enregistrée en PNG avec un nom unique.
