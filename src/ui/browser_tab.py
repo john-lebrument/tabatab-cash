@@ -1,7 +1,7 @@
 import os
 import string
 from pathlib import Path
-from PyQt6.QtCore import QDir, QModelIndex, QPersistentModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer, QEvent, QRect
+from PyQt6.QtCore import QDir, QModelIndex, QPersistentModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer, QEvent, QRect, QThreadPool
 from PyQt6.QtGui import QIcon, QFont, QDrag, QKeySequence, QColor
 from PyQt6.QtWidgets import (
     QApplication,
@@ -24,9 +24,12 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QProgressDialog,
+    QSizePolicy,
 )
 
 from src.ui.thumbnail_view import ThumbnailView
+from src.utils.duplicates import DuplicateScan, recycle_duplicates
 from src.utils.image_loader import ThumbnailManager
 from src.ui.drag_feedback import drop_action, paint_destination, set_large_drag_cursors
 from src.ui.breadcrumb_bar import BreadcrumbBar
@@ -322,6 +325,18 @@ class BrowserTabWidget(QWidget):
         self.history_back: list[str] = []
         self.history_forward: list[str] = []
         self.is_navigating_history: bool = False
+        self._folder_snapshot = {}
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(400)
+        self._refresh_timer.timeout.connect(self._refresh_visible)
+        # Poll only visible tabs. Native directory watches on Windows can hold
+        # handles that prevent moving or renaming an ancestor of an open folder.
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(1500)
+        self._poll_timer.timeout.connect(self._refresh_visible)
+        self._poll_timer.start()
+        self._duplicate_scan = None
 
         self._init_ui()
         self.navigate_to(self.current_folder, add_history=False)
@@ -431,11 +446,24 @@ class BrowserTabWidget(QWidget):
         self.btn_videos.setToolTip('Afficher ou masquer les vidéos ; un double-clic ouvre le lecteur vidéo par défaut')
         self.btn_videos.setChecked(bool(self.config.get('show_videos', False)) if self.config else False)
         sort_bar.addWidget(self.btn_videos)
+        self.btn_zips = QPushButton('ZIP : OFF', self)
+        self.btn_zips.setCheckable(True)
+        self.btn_zips.setChecked(bool(self.config.get('show_zips', False)) if self.config else False)
+        self.btn_zips.setText('ZIP : ON' if self.btn_zips.isChecked() else 'ZIP : OFF')
+        self.btn_zips.setToolTip('Afficher les archives ZIP ; double-clic pour ouvrir avec Windows')
+        self.btn_zips.toggled.connect(self._toggle_zips)
+        sort_bar.addWidget(self.btn_zips)
+        self.btn_duplicates = QPushButton('Doublons…', self)
+        self.btn_duplicates.setToolTip('Rechercher les fichiers de contenu identique dans ce dossier uniquement')
+        self.btn_duplicates.clicked.connect(self._find_duplicates)
+        sort_bar.addWidget(self.btn_duplicates)
         sort_bar.addStretch()
         hint = QLabel('Ctrl+C : copier  ·  dossier + Ctrl+V : coller dedans  ·  Ctrl+glisser : copier', self)
+        hint.setWordWrap(True)
+        hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         hint.setStyleSheet('color: #888888; padding-right: 8px;')
-        sort_bar.addWidget(hint)
         main_layout.addLayout(sort_bar)
+        main_layout.addWidget(hint)
 
         # 3. Central Splitter: Left Sidebar (Favorites + Tree) & Right Thumbnail Grid
         self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -515,6 +543,7 @@ class BrowserTabWidget(QWidget):
         self.thumb_view.sort_requested.connect(self._set_sort_from_menu)
         self.fav_list.paste_requested.connect(self.thumb_view.paste_images)
         self.thumb_view.show_videos = self.btn_videos.isChecked()
+        self.thumb_view.show_zips = self.btn_zips.isChecked()
         self.btn_videos.toggled.connect(self._toggle_videos)
         self.thumb_view.setThumbnailSize(self.current_thumb_size)
         self.thumb_view.set_sort(self.combo_sort.currentData(), self.combo_order.currentData())
@@ -541,6 +570,48 @@ class BrowserTabWidget(QWidget):
         self.thumb_view.set_show_videos(visible)
         if self.config:
             self.config.set('show_videos', visible)
+
+    def _toggle_zips(self, visible):
+        self.btn_zips.setText('ZIP : ON' if visible else 'ZIP : OFF')
+        self.thumb_view.show_zips = visible
+        self.refresh()
+        if self.config: self.config.set('show_zips', visible)
+
+    def _find_duplicates(self):
+        if self._duplicate_scan is not None: return
+        self._duplicate_scan = DuplicateScan(self.current_folder)
+        self.btn_duplicates.setEnabled(False)
+        self._scan_dialog = QProgressDialog('Comparaison SHA-256 des fichiers…', 'Annuler', 0, 0, self)
+        self._scan_dialog.setWindowTitle('Recherche des doublons')
+        self._scan_dialog.setMinimumDuration(0)
+        self._scan_dialog.canceled.connect(self._duplicate_scan.cancel)
+        self._duplicate_scan.signals.finished.connect(self._duplicates_found)
+        QThreadPool.globalInstance().start(self._duplicate_scan)
+
+    def _duplicates_found(self, groups, errors):
+        cancelled = self._duplicate_scan.cancelled.is_set()
+        self._scan_dialog.close()
+        self._duplicate_scan = None
+        self.btn_duplicates.setEnabled(True)
+        if groups is None or cancelled: return
+        count = sum(len(paths) - 1 for _, paths in groups)
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle('Doublons du dossier')
+        dialog.setText(f'{count} doublon(s) de contenu identique trouvé(s).')
+        dialog.setInformativeText('Le premier nom par ordre alphabétique est conservé dans chaque groupe. Les autres seront envoyés à la corbeille. Les sous-dossiers sont exclus.')
+        details = []
+        for _, paths in groups:
+            details.append('CONSERVER : ' + str(paths[0]))
+            details.extend('CORBEILLE : ' + str(p) for p in paths[1:])
+        details.extend(errors)
+        if details: dialog.setDetailedText('\n'.join(details))
+        dialog.addButton('Fermer', QMessageBox.ButtonRole.RejectRole)
+        delete = dialog.addButton('Supprimer les doublons', QMessageBox.ButtonRole.DestructiveRole) if count else None
+        dialog.exec()
+        if delete is not None and dialog.clickedButton() is delete:
+            removed, failures = recycle_duplicates(groups)
+            self.refresh()
+            QMessageBox.information(self, 'Doublons', f'{len(removed)} fichier(s) envoyé(s) à la corbeille.' + ('\n' + '\n'.join(failures) if failures else ''))
 
     def _on_sort_changed(self):
         criterion, order = self.combo_sort.currentData(), self.combo_order.currentData()
@@ -813,9 +884,11 @@ class BrowserTabWidget(QWidget):
             self.history_forward.clear()
 
         self.current_folder = resolved_str
+        self._folder_snapshot = {}
         self.path_edit.setText(resolved_str)
         self.breadcrumb.set_path(resolved_str)
         self.thumb_view.setFolder(resolved_str)
+        self._folder_snapshot = self._read_snapshot()
         self._update_fav_star_button()
 
         # Highlight in Tree
@@ -850,8 +923,40 @@ class BrowserTabWidget(QWidget):
         if parent.exists() and parent != Path(self.current_folder):
             self.navigate_to(str(parent))
 
-    def refresh(self):
+    def _read_snapshot(self):
+        snapshot = {}
+        try:
+            for path in Path(self.current_folder).iterdir():
+                stat = path.stat()
+                snapshot[str(path)] = (stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            pass
+        return snapshot
+
+    def refresh(self, only_if_changed=False):
+        if QApplication.instance().property('tabatab_drag_active'):
+            self._refresh_timer.start()
+            return
+        selected = set(self.thumb_view.get_selected_file_paths())
+        current = self.thumb_view.currentItem()
+        current_path = current.data(ROLE_PATH) if current else None
+        scroll = self.thumb_view.verticalScrollBar().value()
+        snapshot = self._read_snapshot()
+        if only_if_changed and snapshot == self._folder_snapshot: return
+        for path, value in snapshot.items():
+            if self._folder_snapshot.get(path) != value:
+                self.thumbnail_manager.cache.invalidate(path)
+        self._folder_snapshot = snapshot
         self.thumb_view.setFolder(self.current_folder)
+        for row in range(self.thumb_view.count()):
+            item = self.thumb_view.item(row)
+            if item.data(ROLE_PATH) == current_path:
+                self.thumb_view.setCurrentItem(item)
+            item.setSelected(item.data(ROLE_PATH) in selected)
+        self.thumb_view.verticalScrollBar().setValue(scroll)
+
+    def _refresh_visible(self):
+        if self.isVisible(): self.refresh(only_if_changed=True)
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(

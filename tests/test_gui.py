@@ -28,6 +28,7 @@ class TestGUIComponents(unittest.TestCase):
         cls.app.processEvents()
 
     def setUp(self):
+        self.previous_widgets = set(self.app.topLevelWidgets())
         self.test_dir = PROJECT_ROOT / "tests" / "temp_gui_test"
         self.test_dir.mkdir(parents=True, exist_ok=True)
         self.settings_patch = patch('src.config.get_settings_path', return_value=self.test_dir / 'settings.json')
@@ -39,8 +40,13 @@ class TestGUIComponents(unittest.TestCase):
 
     def tearDown(self):
         import shutil
-        from PyQt6.QtCore import QThreadPool
+        from PyQt6.QtCore import QThreadPool, QCoreApplication, QEvent
         QThreadPool.globalInstance().waitForDone()
+        self.app.processEvents()
+        for widget in set(self.app.topLevelWidgets()) - self.previous_widgets:
+            widget.close()
+            widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir, ignore_errors=True)

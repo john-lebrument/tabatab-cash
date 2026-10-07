@@ -31,12 +31,14 @@ def blurred_region(image, box, strength):
     return blurred_regions(image, [box], strength)
 
 
-def save_blurs(path, boxes, strength, overwrite=False, rotation=0):
+def save_blurs(path, boxes, strength, overwrite=False, rotation=0, horizontal_mirror=False):
     src = Path(path)
     dest = src if overwrite else get_unique_destination_path(src.parent, f'{src.stem}_flou{src.suffix}')
     with Image.open(src) as source:
         fmt = source.format
         image = ImageOps.exif_transpose(source).convert('RGBA' if 'A' in source.getbands() else 'RGB')
+        if horizontal_mirror:
+            image = ImageOps.mirror(image)
         if rotation:
             image = image.rotate(-rotation, expand=True)
         result = blurred_regions(image, boxes, strength)

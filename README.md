@@ -1,16 +1,18 @@
-# TABaTAB Cash — version 2.6
+# TABaTAB Cash — version 2.7
 
 Visionneuse et explorateur d’images Windows portable avec onglets, favoris, navigation plein écran et outils de retouche.
 
 **[Télécharger la dernière version Windows](https://github.com/john-lebrument/tabatab-cash/releases/latest)** · **[Historique des versions et nouveautés](CHANGELOG.md)**
 
-## Nouveautés 2.6
+## Nouveautés 2.7
 
-- **Glisser-déposer vers les favoris** : déplacer sans Ctrl, copier avec Ctrl. La destination est surlignée et les noms déjà présents ne sont pas écrasés.
-- **Croix rouge à droite de chaque favori** : le retirer immédiatement, sans supprimer son dossier.
-- **Tri de l’arborescence** : dossiers `_…` avant les noms numériques, avec `2` avant `10`.
-- **Informations en haut à gauche du plein écran** : nom du fichier, compteur, images restantes et zoom visible en permanence.
-- **Une photo ouverte depuis Windows rejoint une instance déjà lancée.** Pour ouvrir une deuxième instance indépendante, faire un clic du milieu sur l’icône dans la barre des tâches Windows. Un lancement sans photo ou avec `--new-instance` ouvre également une instance indépendante.
+- **Miroir horizontal (H)** : inverse la gauche et la droite des images sélectionnées depuis la grille ou le menu de rotation. En plein écran, H et le bouton Miroir prévisualisent le résultat ; Ctrl+S permet de sauvegarder ou de créer une copie. Le miroir reste compatible avec les rotations, le recadrage et le floutage.
+- **Début / Fin dans les miniatures** : rejoint la première ou la dernière image et fait défiler la grille jusqu’à elle.
+- **Actualisation automatique** : surveillance du dossier, relecture au retour sur un onglet ou dans la fenêtre. Les nouveaux fichiers sont triés selon le réglage courant, avec conservation de la sélection et de la position de défilement. Les miniatures modifiées sont invalidées. F5 reste disponible.
+- **Bouton ZIP** : affiche ou masque les archives ZIP, avec choix mémorisé. Double-cliquer ouvre l’archive avec Windows ; les ZIP ne font pas partie du diaporama.
+- **Doublons du dossier affiché** : recherche en arrière-plan, annulable, de tous les fichiers ordinaires de contenu identique par SHA-256, indépendamment de leur nom et de leur extension. Les sous-dossiers et les liens sont exclus. La liste indique les fichiers conservés et les copies à supprimer. Le premier nom par ordre alphabétique est conservé ; les autres peuvent être envoyés à la corbeille avec le bouton Supprimer les doublons. Les empreintes sont revérifiées avant suppression et les fichiers sont conservés si la corbeille est indisponible.
+- **Glisser-déposer renforcé** : suppression du transfert de secours utilisant une ancienne destination survolée ; dépôt dans une zone vide de la barre d’onglets refusé. Les transferts depuis la grille vers un onglet sont différés jusqu’à la fin du glisser-déposer Windows. Cette correction retire des comportements ambigus ; elle ne prétend pas établir la cause de l’incident observé en 2.6.
+
 
 ## Utilisation
 
@@ -43,6 +45,7 @@ Décompresser l’archive complète, puis lancer `TABaTAB Cash.exe` dans son dos
 | C / X | Recadrage |
 | F | Flou |
 | L / R | Rotation gauche / droite |
+| H | Miroir horizontal gauche-droite |
 | Ctrl+S | Enregistrer une rotation |
 | Suppr / Maj+Suppr | Corbeille / suppression définitive |
 | Ctrl+Z | Restaurer la dernière image supprimée pendant la session |
@@ -51,7 +54,7 @@ Le zoom affiché est relatif à l’image ajustée à l’écran : 100 % au dép
 
 ## Historique
 
-Les nouveautés de **2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
+Les nouveautés de **2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
 
 ## Développement et compilation
 

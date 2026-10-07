@@ -41,7 +41,7 @@ from src.utils.image_loader import ThumbnailManager
 from src.utils.file_ops import rename_images, rename_folder, rotate_image_file
 from src.ui.drag_feedback import drop_action, paint_destination, set_large_drag_cursors
 from src.ui.folder_actions import create_folder, delete_folders
-from src.utils.file_ops import is_video_file, is_media_file
+from src.utils.file_ops import is_video_file, is_media_file, is_browser_file
 from src.utils.windows_integration import reveal_in_explorer
 
 # Item data roles
@@ -98,6 +98,7 @@ class ThumbnailView(QListWidget):
         self.current_thumb_size: int = 150
         self.all_files: list[str] = []
         self.show_videos = False
+        self.show_zips = False
         self._last_video_open = ('', 0)
         self.drag_start_pos: QPoint | None = None
         self.sort_by = 'name'
@@ -183,7 +184,7 @@ class ThumbnailView(QListWidget):
             self.addItem(item)
 
         # 2. Then add image files
-        images = sorted([f for f in entries if f.is_file() and (is_image_file(f) or (self.show_videos and is_video_file(f)))],
+        images = sorted([f for f in entries if f.is_file() and (is_image_file(f) or (self.show_videos and is_video_file(f)) or (self.show_zips and f.suffix.lower() == '.zip'))],
                         key=self._sort_key, reverse=self.sort_order == 'desc')
         placeholder = self._create_placeholder_pixmap(self.current_thumb_size)
 
@@ -197,11 +198,14 @@ class ThumbnailView(QListWidget):
                 item.setToolTip('Vidéo — cliquer pour ouvrir dans le lecteur par défaut')
             
             # Check cache
+            if f.suffix.lower() == '.zip':
+                item.setText(f'ZIP {f.name}')
+                item.setToolTip('Archive ZIP : ouvrir avec Windows')
             cached = self.thumbnail_manager.cache.get(f"{file_str}_{self.current_thumb_size}")
             if cached:
                 item.setIcon(QIcon(cached))
             else:
-                item.setIcon(QIcon(self._video_placeholder(self.current_thumb_size) if is_video_file(f) else placeholder))
+                item.setIcon(QIcon(self._archive_placeholder(self.current_thumb_size) if f.suffix.lower() == '.zip' else self._video_placeholder(self.current_thumb_size) if is_video_file(f) else placeholder))
 
             self.addItem(item)
 
@@ -247,7 +251,7 @@ class ThumbnailView(QListWidget):
         self._set_clipboard(True)
 
     def _set_clipboard(self, cut):
-        paths = [p for p in self.get_selected_file_paths() if Path(p).is_file() and is_media_file(p)]
+        paths = [p for p in self.get_selected_file_paths() if Path(p).is_file() and is_browser_file(p)]
         if not paths:
             return
         mime = QMimeData()
@@ -285,7 +289,7 @@ class ThumbnailView(QListWidget):
                     self.clipboard_image_saved.emit(str(destination))
             return
         paths = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
-        paths = [p for p in paths if Path(p).is_file() and is_media_file(p)]
+        paths = [p for p in paths if Path(p).is_file() and is_browser_file(p)]
         if paths:
             effect = bytes(mime.data('application/x-qt-windows-mime;value="Preferred DropEffect"'))
             cut = bytes(mime.data('application/x-tabatab-cut')) == b'1' or int.from_bytes(effect or b'\0', 'little') == 2
@@ -310,7 +314,7 @@ class ThumbnailView(QListWidget):
             item = self.item(i)
             if not item.data(ROLE_IS_FOLDER) and self.visualItemRect(item).intersects(visible):
                 file_path = item.data(ROLE_PATH)
-                if file_path:
+                if file_path and Path(file_path).suffix.lower() != '.zip':
                     cached = self.thumbnail_manager.get_thumbnail(file_path, self.current_thumb_size)
                     if cached:
                         item.setIcon(QIcon(cached))
@@ -389,6 +393,16 @@ class ThumbnailView(QListWidget):
         painter.end()
         return pix
 
+    def _archive_placeholder(self, size):
+        pix = QPixmap(size, size)
+        pix.fill(QColor('#745729'))
+        painter = QPainter(pix)
+        painter.setPen(QColor('white'))
+        painter.setFont(QFont('Segoe UI', max(12, size // 8)))
+        painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, 'ZIP')
+        painter.end()
+        return pix
+
     def set_show_videos(self, visible):
         self.show_videos = bool(visible)
         self.setFolder(self.current_folder)
@@ -408,6 +422,8 @@ class ThumbnailView(QListWidget):
             self.folder_double_clicked.emit(path)
         elif is_video_file(path):
             self._open_video(path)
+        elif Path(path).suffix.lower() == '.zip':
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         else:
             self.image_double_clicked.emit(path)
 
@@ -471,17 +487,16 @@ class ThumbnailView(QListWidget):
             drag.setHotSpot(QPoint(pix.width() // 2, pix.height() // 2))
 
         default = Qt.DropAction.CopyAction if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier else Qt.DropAction.MoveAction
-        result = drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction, default)
+        QApplication.instance().setProperty('tabatab_drag_active', True)
+        try:
+            result = drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction, default)
+        finally:
+            QApplication.instance().setProperty('tabatab_drag_active', False)
         self.drag_start_pos = None
         if self._pending_internal_drop:
             # Refresh the source model only after the native drag has finished.
             self.files_dropped.emit(*self._pending_internal_drop)
             self._pending_internal_drop = None
-        elif result in (Qt.DropAction.CopyAction, Qt.DropAction.MoveAction) and drag.target() in (self, self.viewport()):
-            # Some Windows/Qt combinations accept an internal drop without
-            # forwarding dropEvent. Complete the Explorer-style Ctrl+drag here.
-            target = self._last_drop_target_folder or self.current_folder
-            self.files_dropped.emit(selected_files, target, result == Qt.DropAction.CopyAction)
         self._last_drop_target_folder = None
 
     def dragEnterEvent(self, event):
@@ -520,6 +535,7 @@ class ThumbnailView(QListWidget):
 
     def dragLeaveEvent(self, event):
         self._drop_folder = None
+        self._last_drop_target_folder = None
         self.viewport().update()
         super().dragLeaveEvent(event)
 
@@ -538,7 +554,7 @@ class ThumbnailView(QListWidget):
 
             urls = event.mimeData().urls()
             source_paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
-            source_paths = [p for p in source_paths if p and (is_media_file(p) or Path(p).is_dir())]
+            source_paths = [p for p in source_paths if p and (is_browser_file(p) or Path(p).is_dir())]
 
             if not source_paths:
                 return
@@ -590,6 +606,17 @@ class ThumbnailView(QListWidget):
             event.accept()
             return
         key = event.key()
+        if key == Qt.Key.Key_H and not event.modifiers():
+            if not event.isAutoRepeat(): self._rotate_selected(0, horizontal_mirror=True)
+            event.accept()
+            return
+        if key in (Qt.Key.Key_Home, Qt.Key.Key_End) and self.count():
+            rows = [i for i in range(self.count()) if not self.item(i).data(ROLE_IS_FOLDER) and is_image_file(self.item(i).data(ROLE_PATH))]
+            row = (rows[0] if key == Qt.Key.Key_Home else rows[-1]) if rows else (0 if key == Qt.Key.Key_Home else self.count() - 1)
+            self.setCurrentRow(row)
+            self.scrollToItem(self.item(row), QAbstractItemView.ScrollHint.PositionAtTop if key == Qt.Key.Key_Home else QAbstractItemView.ScrollHint.PositionAtBottom)
+            event.accept()
+            return
         if key == Qt.Key.Key_F2:
             if not event.isAutoRepeat():
                 self._rename_selected()
@@ -677,7 +704,7 @@ class ThumbnailView(QListWidget):
                 self.folder_deleted.emit(path)
 
         for p in selected:
-            if not Path(p).is_file() or not is_media_file(p):
+            if not Path(p).is_file() or not is_browser_file(p):
                 continue
             try:
                 if permanent:
@@ -696,7 +723,7 @@ class ThumbnailView(QListWidget):
             self.setFolder(self.current_folder)
             self.select_path(path)
 
-    def _rotate_selected(self, degrees):
+    def _rotate_selected(self, degrees, horizontal_mirror=False):
         paths = [p for p in self.get_selected_file_paths() if Path(p).is_file() and is_image_file(p)]
         if not paths:
             return
@@ -704,7 +731,7 @@ class ThumbnailView(QListWidget):
         errors = []
         for path in paths:
             try:
-                rotate_image_file(path, degrees)
+                rotate_image_file(path, degrees, horizontal_mirror=horizontal_mirror)
                 self.thumbnail_manager.cache.invalidate(path)
                 rotated.append(path)
             except OSError as error:
@@ -793,6 +820,8 @@ class ThumbnailView(QListWidget):
         if selected_images and not is_video_file(file_path):
             menu.addSeparator()
             rotate_menu = menu.addMenu(f"Faire pivoter ({len(selected_images)})")
+            rotate_menu.addAction('Miroir horizontal (H)').triggered.connect(
+                lambda: self._rotate_selected(0, horizontal_mirror=True))
             rotate_menu.addAction('↺ 90° vers la gauche').triggered.connect(
                 lambda: self._rotate_selected(-90))
             rotate_menu.addAction('↻ 90° vers la droite').triggered.connect(

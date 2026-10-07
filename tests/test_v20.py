@@ -38,7 +38,7 @@ class FeaturesV20(unittest.TestCase):
             self.grid.itemDoubleClicked.emit(item)
             launch.assert_called_once()
 
-    def test_internal_ctrl_drag_fallback_creates_copy(self):
+    def test_unconfirmed_internal_ctrl_drag_keeps_original_without_copy(self):
         self.grid.select_path(self.paths[0])
         with patch('src.ui.thumbnail_view.QApplication.keyboardModifiers',
                    return_value=Qt.KeyboardModifier.ControlModifier), \
@@ -46,7 +46,8 @@ class FeaturesV20(unittest.TestCase):
             drag.return_value.exec.return_value = Qt.DropAction.CopyAction
             drag.return_value.target.return_value = self.grid.viewport()
             self.grid.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
-        self.assertTrue((self.root / '0 - Copie.png').exists())
+        self.assertFalse((self.root / '0 - Copie.png').exists())
+        self.assertTrue(Path(self.paths[0]).exists())
 
     def test_rotation_question_has_readable_explicit_style(self):
         viewer = self.viewer()

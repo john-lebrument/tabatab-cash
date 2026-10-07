@@ -17,7 +17,7 @@ class FeaturesV21(unittest.TestCase):
     tearDown = test_v14.NewBehaviors.tearDown
     viewer = test_v14.NewBehaviors.viewer
 
-    def test_internal_drag_fallback_moves_to_hovered_grid_folder(self):
+    def test_unconfirmed_internal_drag_never_moves_to_hovered_grid_folder(self):
         destination = self.root / 'destination'
         destination.mkdir()
         self.tab.refresh()
@@ -40,8 +40,8 @@ class FeaturesV21(unittest.TestCase):
             drag.return_value.exec.side_effect = native_drag
             drag.return_value.target.return_value = self.grid.viewport()
             self.grid.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
-        self.assertFalse(Path(self.paths[0]).exists())
-        self.assertTrue((destination / '0.png').exists())
+        self.assertTrue(Path(self.paths[0]).exists())
+        self.assertFalse((destination / '0.png').exists())
 
     def test_blur_starts_empty_and_collects_multiple_ovals(self):
         viewer = self.viewer()

@@ -221,6 +221,7 @@ class FullscreenImageViewer(QWidget):
         self.crop_item: CropOverlayItem | None = None
         self.crop_mode: bool = False
         self.rotation_degrees = 0
+        self.horizontal_mirror = False
         self.blur_item = None
         self.blur_source = None
         self._deleted_positions = {}
@@ -341,6 +342,10 @@ class FullscreenImageViewer(QWidget):
         self.btn_rot_r.setToolTip("Rotation 90° Droite (Touche R)")
         self.btn_rot_r.clicked.connect(lambda: self.rotate_image(90))
         hud_layout.addWidget(self.btn_rot_r)
+        self.btn_mirror = QPushButton('Miroir (H)', self.hud)
+        self.btn_mirror.setToolTip('Inverser la gauche et la droite')
+        self.btn_mirror.clicked.connect(self.mirror_image)
+        hud_layout.addWidget(self.btn_mirror)
 
         self.btn_save_rot = QPushButton("💾 Sauvegarder", self.hud)
         self.btn_save_rot.setToolTip("Sauvegarder la rotation (Ctrl + S)")
@@ -555,6 +560,7 @@ class FullscreenImageViewer(QWidget):
         self.hud.hide()
         self.hud_timer.stop()
         self.rotation_degrees = 0
+        self.horizontal_mirror = False
         self.btn_save_rot.hide()
         self._update_counter()
 
@@ -690,7 +696,7 @@ class FullscreenImageViewer(QWidget):
         return choice
 
     def _confirm_rotation(self):
-        if not self.rotation_degrees or not 0 <= self.current_index < len(self.image_list):
+        if not (self.rotation_degrees or self.horizontal_mirror) or not 0 <= self.current_index < len(self.image_list):
             return True
         choice = self._rotation_choice()
         if choice == QMessageBox.StandardButton.Cancel:
@@ -699,12 +705,13 @@ class FullscreenImageViewer(QWidget):
             path = self.image_list[self.current_index]
             try:
                 crop_image(path, (0, 0, self.current_pixmap.width(), self.current_pixmap.height()),
-                           overwrite=True, rotation_degrees=self.rotation_degrees)
+                           overwrite=True, rotation_degrees=self.rotation_degrees, horizontal_mirror=self.horizontal_mirror)
                 self.image_modified.emit(path)
             except Exception as error:
                 QMessageBox.warning(self, 'Rotation non enregistrée', str(error))
                 return False
         self.rotation_degrees = 0
+        self.horizontal_mirror = False
         self.btn_save_rot.hide()
         return True
 
@@ -861,7 +868,7 @@ class FullscreenImageViewer(QWidget):
             return
         try:
             path = save_blurs(self.image_list[self.current_index], boxes,
-                              self.blur_slider.value(), dialog.choice == 'overwrite', self.rotation_degrees)
+                              self.blur_slider.value(), dialog.choice == 'overwrite', self.rotation_degrees, self.horizontal_mirror)
             self.cancel_blur()
             if dialog.choice == 'copy':
                 self.image_list.insert(self.current_index + 1, str(path))
@@ -954,7 +961,7 @@ class FullscreenImageViewer(QWidget):
             overwrite = (dlg.choice == "overwrite")
             try:
                 saved_path = crop_image(file_path, crop_box, overwrite=overwrite,
-                                        rotation_degrees=self.rotation_degrees)
+                                        rotation_degrees=self.rotation_degrees, horizontal_mirror=self.horizontal_mirror)
                 self.cancel_crop()
                 if not overwrite:
                     # Add newly created file to image list and select it
@@ -991,6 +998,20 @@ class FullscreenImageViewer(QWidget):
             idx_str = f"{self.current_index + 1}/{len(self.image_list)}"
             self.lbl_info.setText(f"{name}  ({w}×{h})  [{idx_str}] [Tournée]")
 
+    def mirror_image(self):
+        if not self.current_pixmap or self.current_pixmap.isNull(): return
+        self.cancel_blur()
+        self.cancel_crop()
+        self.current_pixmap = self.current_pixmap.transformed(QTransform().scale(-1, 1))
+        self.horizontal_mirror = not self.horizontal_mirror
+        self.rotation_degrees = (-self.rotation_degrees) % 360
+        self.scene.clear()
+        self.pixmap_item = self.scene.addPixmap(self.current_pixmap)
+        self.scene.setSceneRect(QRectF(self.current_pixmap.rect()))
+        self.fit_to_screen()
+        self.btn_save_rot.setVisible(bool(self.rotation_degrees or self.horizontal_mirror))
+        self._position_hud()
+
     def save_rotated_image(self):
         """Prompts to save or overwrite the rotated image."""
         if not self.image_list or self.current_index < 0 or not self.current_pixmap:
@@ -1009,7 +1030,7 @@ class FullscreenImageViewer(QWidget):
                     dest = get_unique_destination_path(src_p.parent, f"{src_p.stem}_rot{src_p.suffix}")
 
                 crop_image(file_path, (0, 0, self.current_pixmap.width(), self.current_pixmap.height()),
-                           destination_path=dest, overwrite=overwrite, rotation_degrees=self.rotation_degrees)
+                           destination_path=dest, overwrite=overwrite, rotation_degrees=self.rotation_degrees, horizontal_mirror=self.horizontal_mirror)
                 if not overwrite:
                     self.image_list.insert(self.current_index + 1, str(dest))
                     self.current_index += 1
@@ -1042,6 +1063,10 @@ class FullscreenImageViewer(QWidget):
 
     def keyPressEvent(self, event):
         key = event.key()
+        if key == Qt.Key.Key_H and not event.modifiers():
+            if not event.isAutoRepeat(): self.mirror_image()
+            event.accept()
+            return
         if key == Qt.Key.Key_F2:
             if not event.isAutoRepeat():
                 self.rename_current_image()

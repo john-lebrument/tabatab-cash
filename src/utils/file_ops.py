@@ -51,6 +51,10 @@ def is_media_file(path):
     return is_image_file(path) or is_video_file(path)
 
 
+def is_browser_file(path):
+    return is_media_file(path) or Path(path).suffix.lower() == '.zip'
+
+
 def is_image_file(path: Path | str) -> bool:
     """Checks whether the file has a supported image extension."""
     return Path(path).suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
@@ -59,7 +63,7 @@ def is_image_file(path: Path | str) -> bool:
 def trash_image(path: str | Path):
     """Recycle when possible, otherwise delete with a session undo backup."""
     path = Path(path).absolute()
-    if not path.is_file() or not is_media_file(path):
+    if not path.is_file() or not is_browser_file(path):
         raise OSError("Ce fichier image n'existe plus.")
     file = QFile(str(path))
     backup = Path(_undo_directory.name) / uuid.uuid4().hex
@@ -264,7 +268,7 @@ def rename_images(paths, first_name):
     match = re.fullmatch(r'(.*?)(\d+)', name)
     plan = []
     for index, source in enumerate(sources):
-        if not source.is_file() or not is_media_file(source):
+        if not source.is_file() or not is_browser_file(source):
             raise ValueError(f'Image introuvable : {source.name}')
         if len(sources) == 1:
             stem = name
@@ -301,6 +305,7 @@ def crop_image(
     destination_path: Optional[str | Path] = None,
     overwrite: bool = False,
     rotation_degrees: int = 0,
+    horizontal_mirror: bool = False,
 ) -> Path:
     """
     Crops the image defined by crop_box (left, top, right, bottom) in original image pixels.
@@ -318,6 +323,8 @@ def crop_image(
     # Open image, respect EXIF orientation
     with Image.open(src) as img:
         transposed = ImageOps.exif_transpose(img)
+        if horizontal_mirror:
+            transposed = ImageOps.mirror(transposed)
         if rotation_degrees % 360:
             transposed = transposed.rotate(-rotation_degrees, expand=True)
         # crop_box: (left, top, right, bottom)
@@ -356,17 +363,19 @@ def crop_image(
     return dest
 
 
-def rotate_image_file(image_path: str | Path, degrees: int) -> Path:
+def rotate_image_file(image_path: str | Path, degrees: int, horizontal_mirror=False) -> Path:
     """Rotate an image in place atomically, after applying its EXIF orientation."""
     source = Path(image_path)
     if not source.is_file() or not is_image_file(source):
         raise OSError("Ce fichier image n'existe plus.")
-    if degrees % 360 == 0:
+    if degrees % 360 == 0 and not horizontal_mirror:
         return source
 
     with Image.open(source) as opened:
         image_format = opened.format or 'PNG'
         image = ImageOps.exif_transpose(opened)
+        if horizontal_mirror:
+            image = ImageOps.mirror(image)
         image = image.rotate(-degrees, expand=True)
         save_kwargs = {}
         if image.info.get('icc_profile'):

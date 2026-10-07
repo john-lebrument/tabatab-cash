@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
 from src.config import ConfigManager
 from src.ui.browser_tab import BrowserTabWidget
 from src.ui.styles import get_theme_stylesheet
-from src.utils.file_ops import is_image_file, is_media_file, move_file, copy_file
+from src.utils.file_ops import is_image_file, is_media_file, is_browser_file, move_file, copy_file
 from src.utils.image_loader import ThumbnailManager
 from src.ui.drag_feedback import drop_action
 from src.version import APP_TITLE
@@ -203,15 +203,20 @@ class DragDropTabBar(QTabBar):
             pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
             tab_index = self.tabAt(pos)
             if tab_index < 0:
-                tab_index = self.currentIndex()
+                event.ignore()
+                return
 
             urls = event.mimeData().urls()
             file_paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
-            file_paths = [p for p in file_paths if p and (is_media_file(p) or Path(p).is_dir())]
+            file_paths = [p for p in file_paths if p and (is_browser_file(p) or Path(p).is_dir())]
 
             if file_paths:
                 is_copy = drop_action(event) == Qt.DropAction.CopyAction
-                self.files_dropped_on_tab.emit(tab_index, file_paths, is_copy)
+                if hasattr(event.source(), '_pending_internal_drop'):
+                    target_tab = self.parent().widget(tab_index)
+                    event.source()._pending_internal_drop = (file_paths, target_tab.current_folder, is_copy)
+                else:
+                    self.files_dropped_on_tab.emit(tab_index, file_paths, is_copy)
                 event.setDropAction(Qt.DropAction.CopyAction if is_copy else Qt.DropAction.MoveAction)
                 event.accept()
             else:
@@ -464,8 +469,16 @@ class MainWindow(QMainWindow):
         self._save_tab_state()
         current = self.get_current_tab_widget()
         if current:
+            current.refresh()
             total = len(current.thumb_view.all_files)
             self.status_bar.showMessage(f"{current.current_folder} — {total} image(s)")
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow() and hasattr(self, 'tab_widget'):
+            current = self.get_current_tab_widget()
+            if current: current._refresh_timer.start()
 
     def _on_selection_info(self, selected_count: int, total_count: int):
         current = self.get_current_tab_widget()
