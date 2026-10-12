@@ -1,8 +1,17 @@
-# TABaTAB Cash — version 2.8
+# TABaTAB Cash — version 2.9
 
 Visionneuse et explorateur d’images Windows portable avec onglets, favoris, navigation plein écran et outils de retouche.
 
 **[Télécharger la dernière version Windows](https://github.com/john-lebrument/tabatab-cash/releases/latest)** · **[Historique des versions et nouveautés](CHANGELOG.md)**
+
+## Nouveautés 2.9
+
+- Le menu contextuel des favoris propose maintenant l’ouverture du dossier dans l’Explorateur Windows.
+- L’arborescence peint une bande de couleur vive et une teinte visible sur les dossiers colorés ; les couleurs proposées sont plus vives.
+- Le plein écran décode HEIC/HEIF avec Pillow-Heif pour afficher correctement les pixels.
+- Les résultats des doublons sont présentés dans une fenêtre française, avec aperçu des images et détails en lignes distinctes et en gras.
+- Les boutons Vidéos et ZIP partagent le même style vert lorsqu’ils sont activés.
+- Les commandes de tri sont renforcées visuellement.
 
 ## Nouveautés 2.8
 
@@ -65,7 +74,7 @@ Le zoom affiché est relatif à l’image ajustée à l’écran : 100 % au dép
 
 ## Historique
 
-Les nouveautés de **2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
+Les nouveautés de **2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
 
 ## Développement et compilation
 

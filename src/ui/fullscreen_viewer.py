@@ -9,6 +9,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QImageReader,
+    QImage,
     QTransform,
     QWheelEvent,
 )
@@ -34,6 +35,9 @@ from src.ui.crop_overlay import CropOverlayItem
 from src.utils.file_ops import crop_image, trash_image, restore_last_deleted, rename_images
 from src.ui.blur_tool import BlurSelection, blurred_regions, save_blurs
 from src.utils.windows_integration import reveal_in_explorer
+from PIL import Image, ImageOps
+import pillow_heif
+pillow_heif.register_heif_opener()
 
 
 class WindowMoveHandle(QLabel):
@@ -564,9 +568,20 @@ class FullscreenImageViewer(QWidget):
         self.btn_save_rot.hide()
         self._update_counter()
 
-        reader = QImageReader(file_path)
-        reader.setAutoTransform(True)
-        self.current_pixmap = QPixmap.fromImage(reader.read())
+        image = None
+        if Path(file_path).suffix.lower() in {'.heic', '.heif'}:
+            try:
+                with Image.open(file_path) as opened:
+                    decoded = ImageOps.exif_transpose(opened).convert('RGBA')
+                    image = QImage(decoded.tobytes(), decoded.width, decoded.height,
+                                   decoded.width * 4, QImage.Format.Format_RGBA8888).copy()
+            except Exception:
+                image = None
+        else:
+            reader = QImageReader(file_path)
+            reader.setAutoTransform(True)
+            image = reader.read()
+        self.current_pixmap = QPixmap.fromImage(image) if image is not None else QPixmap()
         if self.current_pixmap.isNull():
             return
 

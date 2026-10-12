@@ -1,9 +1,10 @@
 import os
 import string
+import html
 from datetime import datetime
 from pathlib import Path
 from PyQt6.QtCore import QDir, QModelIndex, QPersistentModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer, QEvent, QRect, QThreadPool
-from PyQt6.QtGui import QIcon, QFont, QDrag, QKeySequence, QColor
+from PyQt6.QtGui import QIcon, QFont, QDrag, QKeySequence, QColor, QPixmap, QImage, QBrush
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -28,6 +29,8 @@ from PyQt6.QtWidgets import (
     QProgressDialog,
     QSizePolicy,
     QColorDialog,
+    QDialog,
+    QScrollArea,
 )
 
 from src.ui.thumbnail_view import ThumbnailView
@@ -40,6 +43,8 @@ from src.utils.file_ops import rename_folder
 from src.utils.favorites import export_favorites, import_favorites
 from src.ui.folder_model import FolderModel
 from src.utils.windows_integration import open_folder_in_explorer
+from src.utils.file_ops import is_image_file
+from PIL import Image, ImageOps
 
 
 class FavoriteDelegate(QStyledItemDelegate):
@@ -59,6 +64,22 @@ class FavoriteDelegate(QStyledItemDelegate):
         painter.setFont(font)
         painter.drawText(self.close_rect(option.rect), Qt.AlignmentFlag.AlignCenter, '×')
         painter.restore()
+
+
+class FolderColorDelegate(QStyledItemDelegate):
+    """Paint a visible color band and a soft row tint for colored folders."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        brush = index.data(Qt.ItemDataRole.BackgroundRole)
+        if isinstance(brush, QBrush) and brush.style() != Qt.BrushStyle.NoBrush:
+            color = brush.color()
+            painter.save()
+            tint = QColor(color)
+            tint.setAlpha(42)
+            painter.fillRect(option.rect, tint)
+            painter.fillRect(QRect(option.rect.left(), option.rect.top(), 6, option.rect.height()), color)
+            painter.restore()
 
 
 class FavoritesList(QListWidget):
@@ -165,6 +186,103 @@ class FavoritesList(QListWidget):
         super().dropEvent(event)
         if event.isAccepted():
             QTimer.singleShot(0, self.order_changed.emit)
+
+
+class DuplicateResultsDialog(QDialog):
+    """French, image-first summary of already-detected duplicate groups."""
+
+    def __init__(self, groups, errors, count, parent=None):
+        super().__init__(parent)
+        self.delete_requested = False
+        self.setWindowTitle('Résultats de la recherche des doublons')
+        self.resize(760, 680)
+        layout = QVBoxLayout(self)
+        header = QLabel(f'<b>{count} fichier(s) en double</b> dans {len(groups)} groupe(s). '
+                        'Les fichiers conservés sont signalés pour chaque groupe.', self)
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        groups_layout = QVBoxLayout(content)
+        for number, (digest, paths) in enumerate(groups, 1):
+            group_title = QLabel(f'<b>GROUPE {number}</b> — {len(paths)} fichiers de contenu identique', content)
+            groups_layout.addWidget(group_title)
+            for position, path in enumerate(paths):
+                card = QWidget(content)
+                row = QHBoxLayout(card)
+                row.setContentsMargins(8, 5, 8, 5)
+                preview = QLabel(card)
+                preview.setFixedSize(76, 76)
+                preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                preview.setStyleSheet('background: #303030; border: 1px solid #555;')
+                pixmap = self._preview(path)
+                if not pixmap.isNull():
+                    preview.setPixmap(pixmap)
+                else:
+                    preview.setText('Fichier')
+                row.addWidget(preview)
+                try:
+                    info = Path(path).stat()
+                    modified = datetime.fromtimestamp(info.st_mtime).strftime('%d/%m/%Y à %H:%M:%S')
+                    size = BrowserTabWidget._format_file_size(info.st_size)
+                except OSError:
+                    modified, size = 'indisponible', 'indisponible'
+                disposition = 'À CONSERVER' if position == 0 else 'À ENVOYER À LA CORBEILLE'
+                name = html.escape(Path(path).name)
+                safe_path = html.escape(str(path))
+                suffix = html.escape(Path(path).suffix.lower() or 'sans extension')
+                details = QLabel(
+                    f'<b>{disposition}</b><br>'
+                    f'<b>Nom :</b> {name}<br>'
+                    f'<b>Format :</b> {suffix}<br>'
+                    f'<b>Taille :</b> {html.escape(size)}<br>'
+                    f'<b>Modifié le :</b> {html.escape(modified)}<br>'
+                    f'<b>Emplacement :</b> {safe_path}', card)
+                details.setTextFormat(Qt.TextFormat.RichText)
+                details.setWordWrap(True)
+                row.addWidget(details, 1)
+                card.setStyleSheet('QWidget { background: #252525; border-radius: 5px; }')
+                groups_layout.addWidget(card)
+            groups_layout.addSpacing(10)
+        if errors:
+            failures = QLabel('<b>Fichiers non comparés :</b><br>' +
+                              '<br>'.join(html.escape(error) for error in errors), content)
+            failures.setWordWrap(True)
+            groups_layout.addWidget(failures)
+        groups_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        self.close_button = QPushButton('Fermer', self)
+        self.close_button.clicked.connect(self.reject)
+        buttons.addWidget(self.close_button)
+        self.delete_button = QPushButton('Supprimer les doublons', self) if count else None
+        if self.delete_button:
+            self.delete_button.setStyleSheet('QPushButton { background: #a62626; font-weight: bold; padding: 8px 14px; } QPushButton:hover { background: #c93636; }')
+            self.delete_button.clicked.connect(self._delete)
+            buttons.addWidget(self.delete_button)
+        layout.addLayout(buttons)
+
+    @staticmethod
+    def _preview(path):
+        if not is_image_file(path):
+            return QPixmap()
+        try:
+            with Image.open(path) as opened:
+                image = ImageOps.exif_transpose(opened).convert('RGBA')
+                image.thumbnail((72, 72), Image.Resampling.LANCZOS)
+                return QPixmap.fromImage(QImage(image.tobytes(), image.width, image.height,
+                                                image.width * 4, QImage.Format.Format_RGBA8888).copy())
+        except Exception:
+            return QPixmap()
+
+    def _delete(self):
+        self.delete_requested = True
+        self.accept()
 
 
 class FolderTree(QTreeView):
@@ -435,7 +553,11 @@ class BrowserTabWidget(QWidget):
         main_layout.addLayout(nav_bar)
 
         sort_bar = QHBoxLayout()
-        sort_bar.addWidget(QLabel('Trier par :', self))
+        sort_bar.setSpacing(8)
+        sort_label = QLabel('TRIER PAR', self)
+        sort_label.setObjectName('sortCriteriaLabel')
+        sort_label.setStyleSheet('QLabel { color: #9ecbff; font-weight: 800; letter-spacing: 1px; padding: 5px 7px; background: #18314a; border-radius: 4px; }')
+        sort_bar.addWidget(sort_label)
         self.combo_sort = QComboBox(self)
         for label, key in [('Nom', 'name'), ('Date de modification', 'date'),
                            ('Date de création', 'created'), ('Taille du fichier', 'size'),
@@ -448,11 +570,21 @@ class BrowserTabWidget(QWidget):
         self.combo_order.addItem('Décroissant ↓', 'desc')
         saved_order = self.config.get('sort_order', 'asc') if self.config else 'asc'
         self.combo_order.setCurrentIndex(max(0, self.combo_order.findData(saved_order)))
+        combo_style = ('QComboBox { background: #303d4a; color: white; border: 2px solid #4c8dcc; '
+                        'border-radius: 5px; padding: 6px 10px; min-width: 145px; font-weight: 700; } '
+                        'QComboBox:hover { border-color: #8bc5ff; background: #394b5b; } '
+                        'QComboBox::drop-down { border: 0; width: 24px; }')
+        self.combo_sort.setStyleSheet(combo_style)
+        self.combo_order.setStyleSheet(combo_style.replace('min-width: 145px', 'min-width: 128px'))
         sort_bar.addWidget(self.combo_sort)
         sort_bar.addWidget(self.combo_order)
         self.btn_videos = QPushButton('Vidéos', self)
         self.btn_videos.setCheckable(True)
-        self.btn_videos.setStyleSheet('QPushButton { background: #555; color: white; border: 1px solid #777; padding: 6px 14px; font-weight: bold; } QPushButton:checked { background: #16853b; border: 2px solid #70ef94; color: white; }')
+        toggle_style = ('QPushButton { background: #50545a; color: white; border: 2px solid #777; '
+                        'border-radius: 5px; padding: 6px 14px; font-weight: bold; } '
+                        'QPushButton:checked { background: #16853b; border: 2px solid #43f28f; color: white; } '
+                        'QPushButton:hover { border-color: #b8c6d4; }')
+        self.btn_videos.setStyleSheet(toggle_style)
         self.btn_videos.toggled.connect(lambda checked: self.btn_videos.setText('Vidéos : ON' if checked else 'Vidéos : OFF'))
         self.btn_videos.setText('Vidéos : OFF')
         self.btn_videos.setToolTip('Afficher ou masquer les vidéos ; un double-clic ouvre le lecteur vidéo par défaut')
@@ -460,6 +592,7 @@ class BrowserTabWidget(QWidget):
         sort_bar.addWidget(self.btn_videos)
         self.btn_zips = QPushButton('ZIP : OFF', self)
         self.btn_zips.setCheckable(True)
+        self.btn_zips.setStyleSheet(toggle_style)
         self.btn_zips.setChecked(bool(self.config.get('show_zips', False)) if self.config else False)
         self.btn_zips.setText('ZIP : ON' if self.btn_zips.isChecked() else 'ZIP : OFF')
         self.btn_zips.setToolTip('Afficher les archives ZIP ; double-clic pour ouvrir avec Windows')
@@ -543,6 +676,7 @@ class BrowserTabWidget(QWidget):
         self.tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree_view.customContextMenuRequested.connect(self._show_tree_context_menu)
         self.tree_view.setModel(self.tree_model)
+        self.tree_view.setItemDelegate(FolderColorDelegate(self.tree_view))
         for col in range(1, 4):
             self.tree_view.hideColumn(col)
         self.tree_view.setHeaderHidden(True)
@@ -612,35 +746,9 @@ class BrowserTabWidget(QWidget):
         self.btn_duplicates.setEnabled(True)
         if groups is None or cancelled: return
         count = sum(len(paths) - 1 for _, paths in groups)
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle('Doublons du dossier')
-        dialog.setText(f'{count} fichier(s) en double dans {len(groups)} groupe(s).')
-        dialog.setInformativeText('Chaque groupe est comparé par contenu exact. Le premier nom par ordre alphabétique est conservé ; les autres fichiers seront envoyés à la corbeille. Les sous-dossiers sont exclus.')
-        details = []
-        for number, (_, paths) in enumerate(groups, 1):
-            try:
-                size = Path(paths[0]).stat().st_size
-                size_text = self._format_file_size(size)
-            except OSError:
-                size_text = 'taille indisponible'
-            details.append(f'GROUPE {number} — {len(paths)} fichiers — {size_text} chacun')
-            for position, path in enumerate(paths):
-                try:
-                    modified = datetime.fromtimestamp(Path(path).stat().st_mtime).strftime('%d/%m/%Y %H:%M:%S')
-                except OSError:
-                    modified = 'date indisponible'
-                status = 'CONSERVER' if position == 0 else 'ENVOYER À LA CORBEILLE'
-                details.append(f'  {status}  {Path(path).name}  |  modifié le {modified}')
-                details.append(f'    {path}')
-            details.append('')
-        if errors:
-            details.append('FICHIERS NON COMPARÉS')
-            details.extend(f'  {error}' for error in errors)
-        if details: dialog.setDetailedText('\n'.join(details))
-        dialog.addButton('Fermer', QMessageBox.ButtonRole.RejectRole)
-        delete = dialog.addButton('Supprimer les doublons', QMessageBox.ButtonRole.DestructiveRole) if count else None
+        dialog = DuplicateResultsDialog(groups, errors, count, self)
         dialog.exec()
-        if delete is not None and dialog.clickedButton() is delete:
+        if dialog.delete_requested:
             removed, failures = recycle_duplicates(groups)
             self.refresh()
             QMessageBox.information(self, 'Doublons', f'{len(removed)} fichier(s) envoyé(s) à la corbeille.' + ('\n' + '\n'.join(failures) if failures else ''))
@@ -711,8 +819,10 @@ class BrowserTabWidget(QWidget):
         if index.isValid():
             menu.addAction('Ouvrir dans l’explorateur').triggered.connect(lambda: open_folder_in_explorer(path))
             colors = menu.addMenu('Couleur du dossier')
-            for label, color in [('Rouge', '#ffcdd2'), ('Orange', '#ffe0b2'), ('Jaune', '#fff9c4'),
-                                 ('Vert', '#c8e6c9'), ('Bleu', '#bbdefb'), ('Violet', '#e1bee7')]:
+            for label, color in [('Rouge vif', '#ff1744'), ('Orange vif', '#ff9100'),
+                                 ('Jaune vif', '#ffea00'), ('Vert vif', '#00e676'),
+                                 ('Cyan vif', '#00e5ff'), ('Bleu vif', '#2979ff'),
+                                 ('Violet vif', '#d500f9'), ('Rose vif', '#ff4081')]:
                 action = colors.addAction(label)
                 action.setIcon(self._color_swatch(color))
                 action.triggered.connect(lambda checked=False, color=color, path=path: self._set_folder_color(path, color))
@@ -745,6 +855,7 @@ class BrowserTabWidget(QWidget):
             colors.pop(key, None)
         self.tree_model.folder_colors = colors
         self.tree_model.dataChanged.emit(self.tree_model.index(path), self.tree_model.index(path), [Qt.ItemDataRole.BackgroundRole])
+        self.tree_view.viewport().update()
         if self.config:
             self.config.set('folder_colors', colors)
 
@@ -866,6 +977,7 @@ class BrowserTabWidget(QWidget):
         menu = QMenu(self)
         act_open = menu.addAction("📂 Ouvrir")
         act_open.triggered.connect(lambda: self.navigate_to(path))
+        menu.addAction('Ouvrir dans l’explorateur').triggered.connect(lambda: open_folder_in_explorer(path))
 
         act_new_tab = menu.addAction("➕ Ouvrir dans un nouvel onglet")
         act_new_tab.triggered.connect(lambda: self.open_in_new_tab_requested.emit(path))

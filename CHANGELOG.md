@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 2.9
+
+- Favoris : le clic droit propose l’ouverture du dossier dans l’Explorateur Windows.
+- Les couleurs de dossier sont rendues avec une bande vive et une teinte de ligne ; les choix prédéfinis utilisent des couleurs plus vives.
+- Le plein écran décode les fichiers HEIC/HEIF avec Pillow-Heif.
+- Remplacement de l’onglet « Show Details » natif par une fenêtre française de résultats, avec miniatures, informations chacune sur sa ligne et libellés en gras.
+- Harmonisation du style des boutons Vidéos et ZIP ; fond vert et contour lumineux lorsqu’ils sont activés.
+- Mise en valeur des contrôles « Trier par » et « Croissant / décroissant ».
+
 ## 2.8
 
 - Clic droit sur les dossiers dans la grille et l’arborescence : ouverture dans l’Explorateur Windows. Le menu de l’arborescence permet également d’attribuer une couleur prédéfinie ou personnalisée, enregistrée dans les préférences.
