@@ -1,8 +1,18 @@
-# TABaTAB Cash — version 2.7
+# TABaTAB Cash — version 2.8
 
 Visionneuse et explorateur d’images Windows portable avec onglets, favoris, navigation plein écran et outils de retouche.
 
 **[Télécharger la dernière version Windows](https://github.com/john-lebrument/tabatab-cash/releases/latest)** · **[Historique des versions et nouveautés](CHANGELOG.md)**
+
+## Nouveautés 2.8
+
+- Clic droit sur un dossier de l’arborescence ou de la grille : ouvrir directement dans l’Explorateur Windows.
+- Clic droit sur un dossier de l’arborescence : choisir une couleur prédéfinie ou personnalisée ; le choix est mémorisé.
+- Après génération d’une vignette vidéo, le lecteur multimédia libère explicitement sa source afin de faciliter la suppression du fichier sous Windows.
+- Les images HEIC et HEIF peuvent être affichées ; le support repose sur Pillow-Heif inclus dans la version portable.
+- Les boutons latéraux 4 et 5 de la souris parcourent l’historique précédent/suivant dans l’arborescence et la grille.
+- La fenêtre des doublons affiche les groupes avec les fichiers conservés et à supprimer, leur taille, leur date de modification et leur chemin. Le calcul et le choix des fichiers conservés sont inchangés.
+- Le double-clic sur une archive ZIP ouvre son application Windows par défaut.
 
 ## Nouveautés 2.7
 
@@ -24,6 +34,7 @@ Décompresser l’archive complète, puis lancer `TABaTAB Cash.exe` dans son dos
 - Tri des miniatures par nom, date de modification, date de création, taille ou type, depuis la barre ou le clic droit.
 - Retouche : rotations, recadrage, flou elliptique avec plusieurs zones, conversion JPEG/PNG et renommage groupé.
 - Images et vidéos : vignettes vidéo lorsque le codec est disponible et lecture dans le lecteur Windows par défaut.
+- Images HEIC/HEIF prises en charge dans la visionneuse.
 - Associations d’images depuis le bouton de l’application, avec validation finale dans les paramètres Windows.
 
 ## Raccourcis
@@ -54,7 +65,7 @@ Le zoom affiché est relatif à l’image ajustée à l’écran : 100 % au dép
 
 ## Historique
 
-Les nouveautés de **2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
+Les nouveautés de **2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
 
 ## Développement et compilation
 

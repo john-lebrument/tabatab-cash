@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 2.8
+
+- Clic droit sur les dossiers dans la grille et l’arborescence : ouverture dans l’Explorateur Windows. Le menu de l’arborescence permet également d’attribuer une couleur prédéfinie ou personnalisée, enregistrée dans les préférences.
+- Les boutons 4 et 5 de la souris reviennent au dossier précédent et avancent dans l’historique, depuis la grille et l’arborescence.
+- Ajout du décodage HEIC/HEIF avec Pillow-Heif, inclus à la compilation portable.
+- Libération explicite de la source par le lecteur vidéo interne de vignettes, pour éviter de conserver un verrou sur une vidéo après l’arrêt de son aperçu.
+- Présentation détaillée des groupes de doublons : rôle de chaque fichier, taille, date de modification et chemin. La recherche SHA-256 et sa règle de conservation restent inchangées.
+- Double-clic sur une archive ZIP : ouverture avec l’application Windows associée.
+
 ## 2.7
 
 - **Miroir horizontal (H)** : inverse la gauche et la droite des images sélectionnées depuis la grille ou le menu de rotation. En plein écran, H et le bouton Miroir prévisualisent le résultat ; Ctrl+S permet de sauvegarder ou de créer une copie. Le miroir reste compatible avec les rotations, le recadrage et le floutage.

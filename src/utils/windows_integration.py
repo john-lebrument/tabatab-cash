@@ -34,6 +34,11 @@ def reveal_in_explorer(path):
     threading.Thread(target=_reveal, args=(path,), daemon=True).start()
 
 
+def open_folder_in_explorer(path):
+    """Open a directory itself in Explorer (without selecting it in its parent)."""
+    subprocess.Popen(['explorer.exe', os.path.abspath(os.path.normpath(str(path)))])
+
+
 COMMON_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.jfif', '.png', '.gif', '.bmp', '.tif', '.tiff',
                            '.webp', '.avif', '.ico')
 

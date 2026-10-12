@@ -37,7 +37,7 @@ def restore_last_deleted():
 
 SUPPORTED_IMAGE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp",
-    ".tiff", ".tif", ".ico", ".jfif", ".avif"
+    ".tiff", ".tif", ".ico", ".jfif", ".avif", ".heic", ".heif"
 }
 
 SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.m4v', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.mpg', '.mpeg', '.mts', '.m2ts', '.3gp', '.flv'}

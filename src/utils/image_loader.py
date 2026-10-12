@@ -3,6 +3,11 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QPixmap
 from PIL import Image, ImageOps
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pillow_heif = None
 from src.utils.file_ops import is_video_file
 
 

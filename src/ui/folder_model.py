@@ -1,7 +1,8 @@
 """Natural folder order, with underscore prefixes before numeric names."""
 import re
+import os
 from PyQt6.QtCore import QModelIndex, QSortFilterProxyModel, Qt
-from PyQt6.QtGui import QFileSystemModel
+from PyQt6.QtGui import QFileSystemModel, QBrush, QColor
 
 
 def folder_sort_key(name):
@@ -16,7 +17,20 @@ class FolderModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.setSourceModel(QFileSystemModel(self))
         self.setDynamicSortFilter(True)
+        self.folder_colors = {}
         self.sort(0, Qt.SortOrder.AscendingOrder)
+
+    @staticmethod
+    def color_key(path):
+        return os.path.normcase(os.path.normpath(str(path)))
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.BackgroundRole and index.isValid():
+            path = self.filePath(index)
+            color = self.folder_colors.get(self.color_key(path))
+            if color:
+                return QBrush(QColor(color))
+        return super().data(index, role)
 
     def lessThan(self, left, right):
         source = self.sourceModel()

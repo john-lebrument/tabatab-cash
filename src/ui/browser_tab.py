@@ -1,5 +1,6 @@
 import os
 import string
+from datetime import datetime
 from pathlib import Path
 from PyQt6.QtCore import QDir, QModelIndex, QPersistentModelIndex, QSize, Qt, pyqtSignal, QMimeData, QUrl, QTimer, QEvent, QRect, QThreadPool
 from PyQt6.QtGui import QIcon, QFont, QDrag, QKeySequence, QColor
@@ -26,6 +27,7 @@ from PyQt6.QtWidgets import (
     QStyleOptionViewItem,
     QProgressDialog,
     QSizePolicy,
+    QColorDialog,
 )
 
 from src.ui.thumbnail_view import ThumbnailView
@@ -37,6 +39,7 @@ from src.ui.folder_actions import create_folder, delete_folders
 from src.utils.file_ops import rename_folder
 from src.utils.favorites import export_favorites, import_favorites
 from src.ui.folder_model import FolderModel
+from src.utils.windows_integration import open_folder_in_explorer
 
 
 class FavoriteDelegate(QStyledItemDelegate):
@@ -168,6 +171,15 @@ class FolderTree(QTreeView):
     files_dropped = pyqtSignal(list, str, bool)
     delete_requested = pyqtSignal(str)
     rename_requested = pyqtSignal(str)
+    history_back_requested = pyqtSignal()
+    history_forward_requested = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.BackButton:
+            self.history_back_requested.emit(); event.accept(); return
+        if event.button() == Qt.MouseButton.ForwardButton:
+            self.history_forward_requested.emit(); event.accept(); return
+        super().mousePressEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F2:
@@ -517,10 +529,13 @@ class BrowserTabWidget(QWidget):
 
         # Folder Tree View
         self.tree_model = FolderModel(self)
+        self.tree_model.folder_colors = self.config.get('folder_colors', {}) if self.config else {}
         self.tree_model.setRootPath(QDir.rootPath())
         self.tree_model.setFilter(QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives)
 
         self.tree_view = FolderTree(left_widget)
+        self.tree_view.history_back_requested.connect(self.go_back)
+        self.tree_view.history_forward_requested.connect(self.go_forward)
         self.tree_view.files_dropped.connect(self._on_files_dropped)
         self.tree_view.delete_requested.connect(self._delete_tree_folder)
         self.tree_view.rename_requested.connect(self._rename_tree_folder)
@@ -539,6 +554,8 @@ class BrowserTabWidget(QWidget):
 
         # Right: Thumbnail Grid
         self.thumb_view = ThumbnailView(self.thumbnail_manager, self.splitter)
+        self.thumb_view.history_back_requested.connect(self.go_back)
+        self.thumb_view.history_forward_requested.connect(self.go_forward)
         self.thumb_view.favorites_provider = self._favorite_destinations
         self.thumb_view.sort_requested.connect(self._set_sort_from_menu)
         self.fav_list.paste_requested.connect(self.thumb_view.paste_images)
@@ -597,13 +614,28 @@ class BrowserTabWidget(QWidget):
         count = sum(len(paths) - 1 for _, paths in groups)
         dialog = QMessageBox(self)
         dialog.setWindowTitle('Doublons du dossier')
-        dialog.setText(f'{count} doublon(s) de contenu identique trouvé(s).')
-        dialog.setInformativeText('Le premier nom par ordre alphabétique est conservé dans chaque groupe. Les autres seront envoyés à la corbeille. Les sous-dossiers sont exclus.')
+        dialog.setText(f'{count} fichier(s) en double dans {len(groups)} groupe(s).')
+        dialog.setInformativeText('Chaque groupe est comparé par contenu exact. Le premier nom par ordre alphabétique est conservé ; les autres fichiers seront envoyés à la corbeille. Les sous-dossiers sont exclus.')
         details = []
-        for _, paths in groups:
-            details.append('CONSERVER : ' + str(paths[0]))
-            details.extend('CORBEILLE : ' + str(p) for p in paths[1:])
-        details.extend(errors)
+        for number, (_, paths) in enumerate(groups, 1):
+            try:
+                size = Path(paths[0]).stat().st_size
+                size_text = self._format_file_size(size)
+            except OSError:
+                size_text = 'taille indisponible'
+            details.append(f'GROUPE {number} — {len(paths)} fichiers — {size_text} chacun')
+            for position, path in enumerate(paths):
+                try:
+                    modified = datetime.fromtimestamp(Path(path).stat().st_mtime).strftime('%d/%m/%Y %H:%M:%S')
+                except OSError:
+                    modified = 'date indisponible'
+                status = 'CONSERVER' if position == 0 else 'ENVOYER À LA CORBEILLE'
+                details.append(f'  {status}  {Path(path).name}  |  modifié le {modified}')
+                details.append(f'    {path}')
+            details.append('')
+        if errors:
+            details.append('FICHIERS NON COMPARÉS')
+            details.extend(f'  {error}' for error in errors)
         if details: dialog.setDetailedText('\n'.join(details))
         dialog.addButton('Fermer', QMessageBox.ButtonRole.RejectRole)
         delete = dialog.addButton('Supprimer les doublons', QMessageBox.ButtonRole.DestructiveRole) if count else None
@@ -612,6 +644,14 @@ class BrowserTabWidget(QWidget):
             removed, failures = recycle_duplicates(groups)
             self.refresh()
             QMessageBox.information(self, 'Doublons', f'{len(removed)} fichier(s) envoyé(s) à la corbeille.' + ('\n' + '\n'.join(failures) if failures else ''))
+
+    @staticmethod
+    def _format_file_size(size):
+        value = float(size)
+        for unit in ('o', 'Ko', 'Mo', 'Go', 'To'):
+            if value < 1024 or unit == 'To':
+                return f'{value:.0f} {unit}' if unit == 'o' else f'{value:.1f} {unit}'
+            value /= 1024
 
     def _on_sort_changed(self):
         criterion, order = self.combo_sort.currentData(), self.combo_order.currentData()
@@ -669,6 +709,16 @@ class BrowserTabWidget(QWidget):
         menu = QMenu(self)
         menu.addAction('Nouveau dossier…').triggered.connect(lambda: self._create_tree_folder(path))
         if index.isValid():
+            menu.addAction('Ouvrir dans l’explorateur').triggered.connect(lambda: open_folder_in_explorer(path))
+            colors = menu.addMenu('Couleur du dossier')
+            for label, color in [('Rouge', '#ffcdd2'), ('Orange', '#ffe0b2'), ('Jaune', '#fff9c4'),
+                                 ('Vert', '#c8e6c9'), ('Bleu', '#bbdefb'), ('Violet', '#e1bee7')]:
+                action = colors.addAction(label)
+                action.setIcon(self._color_swatch(color))
+                action.triggered.connect(lambda checked=False, color=color, path=path: self._set_folder_color(path, color))
+            colors.addSeparator()
+            colors.addAction('Choisir une couleur…').triggered.connect(lambda: self._choose_folder_color(path))
+            colors.addAction('Effacer la couleur').triggered.connect(lambda: self._set_folder_color(path, None))
             menu.addAction('Ouvrir dans un nouvel onglet').triggered.connect(lambda: self.open_in_new_tab_requested.emit(path))
             menu.addAction('Ajouter aux favoris').triggered.connect(lambda: self.add_folder_to_favorites(path))
             rename = menu.addAction('Renommer le dossier (F2)')
@@ -678,6 +728,31 @@ class BrowserTabWidget(QWidget):
             delete.setEnabled(Path(path).resolve() != Path(Path(path).resolve().anchor))
             delete.triggered.connect(lambda: self._delete_tree_folder(path))
         menu.exec(self.tree_view.viewport().mapToGlobal(pos))
+
+    @staticmethod
+    def _color_swatch(color):
+        from PyQt6.QtGui import QPixmap, QIcon
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(QColor(color))
+        return QIcon(pixmap)
+
+    def _set_folder_color(self, path, color):
+        colors = dict(self.config.get('folder_colors', {})) if self.config else dict(self.tree_model.folder_colors)
+        key = self.tree_model.color_key(path)
+        if color:
+            colors[key] = color
+        else:
+            colors.pop(key, None)
+        self.tree_model.folder_colors = colors
+        self.tree_model.dataChanged.emit(self.tree_model.index(path), self.tree_model.index(path), [Qt.ItemDataRole.BackgroundRole])
+        if self.config:
+            self.config.set('folder_colors', colors)
+
+    def _choose_folder_color(self, path):
+        initial = QColor(self.tree_model.folder_colors.get(self.tree_model.color_key(path), '#bbdefb'))
+        color = QColorDialog.getColor(initial, self, 'Couleur du dossier')
+        if color.isValid():
+            self._set_folder_color(path, color.name())
 
     def _rename_tree_folder(self, path):
         source = Path(path).resolve()
@@ -899,6 +974,13 @@ class BrowserTabWidget(QWidget):
 
         self._update_history_buttons()
         self.folder_changed.emit(resolved_str)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.BackButton:
+            self.go_back(); event.accept(); return
+        if event.button() == Qt.MouseButton.ForwardButton:
+            self.go_forward(); event.accept(); return
+        super().mousePressEvent(event)
 
     def go_back(self):
         if self.history_back:

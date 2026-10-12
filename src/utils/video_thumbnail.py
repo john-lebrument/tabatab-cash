@@ -56,4 +56,6 @@ class VideoThumbnails(QObject):
         self.current = None
         self.timer.stop()
         self.player.stop()
+        # QMediaPlayer may otherwise retain the decoder's source handle on Windows.
+        self.player.setSource(QUrl())
         QTimer.singleShot(0, self._next)

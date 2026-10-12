@@ -42,7 +42,7 @@ from src.utils.file_ops import rename_images, rename_folder, rotate_image_file
 from src.ui.drag_feedback import drop_action, paint_destination, set_large_drag_cursors
 from src.ui.folder_actions import create_folder, delete_folders
 from src.utils.file_ops import is_video_file, is_media_file, is_browser_file
-from src.utils.windows_integration import reveal_in_explorer
+from src.utils.windows_integration import reveal_in_explorer, open_folder_in_explorer
 
 # Item data roles
 ROLE_PATH = Qt.ItemDataRole.UserRole
@@ -90,6 +90,8 @@ class ThumbnailView(QListWidget):
     files_dropped = pyqtSignal(list, str, bool)  # source_files, target_folder, is_copy
     selection_changed_info = pyqtSignal(int, int)  # selected_count, total_count
     thumbnail_size_changed = pyqtSignal(int)
+    history_back_requested = pyqtSignal()
+    history_forward_requested = pyqtSignal()
 
     def __init__(self, thumbnail_manager: ThumbnailManager, parent=None):
         super().__init__(parent)
@@ -448,6 +450,12 @@ class ThumbnailView(QListWidget):
             super().wheelEvent(event)
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.BackButton:
+            self.history_back_requested.emit()
+            event.accept(); return
+        if event.button() == Qt.MouseButton.ForwardButton:
+            self.history_forward_requested.emit()
+            event.accept(); return
         self.drag_start_pos = event.position().toPoint() if event.button() == Qt.MouseButton.LeftButton else None
         self._pressed_path = self.itemAt(self.drag_start_pos).data(ROLE_PATH) if self.drag_start_pos is not None and self.itemAt(self.drag_start_pos) else None
         super().mousePressEvent(event)
@@ -793,6 +801,7 @@ class ThumbnailView(QListWidget):
             menu.addAction('Couper (Ctrl+X)').triggered.connect(self.cut_selected)
             menu.addAction('Renommer (F2)').triggered.connect(self._rename_selected)
         if is_folder:
+            menu.addAction('Ouvrir dans l’explorateur').triggered.connect(lambda: open_folder_in_explorer(file_path))
             menu.addAction('Coller dans ce dossier (Ctrl+V)').triggered.connect(
                 lambda: self.paste_images(file_path))
         else:
