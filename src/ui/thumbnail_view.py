@@ -43,6 +43,7 @@ from src.ui.drag_feedback import drop_action, paint_destination, set_large_drag_
 from src.ui.folder_actions import create_folder, delete_folders
 from src.utils.file_ops import is_video_file, is_media_file, is_browser_file
 from src.utils.windows_integration import reveal_in_explorer, open_folder_in_explorer
+from src.utils.image_search import search_similar_images
 
 # Item data roles
 ROLE_PATH = Qt.ItemDataRole.UserRole
@@ -614,6 +615,13 @@ class ThumbnailView(QListWidget):
             event.accept()
             return
         key = event.key()
+        if key == Qt.Key.Key_S and not event.modifiers():
+            if not event.isAutoRepeat():
+                item = self.currentItem()
+                if item and not item.data(ROLE_IS_FOLDER) and is_image_file(item.data(ROLE_PATH)):
+                    search_similar_images(item.data(ROLE_PATH))
+            event.accept()
+            return
         if key == Qt.Key.Key_H and not event.modifiers():
             if not event.isAutoRepeat(): self._rotate_selected(0, horizontal_mirror=True)
             event.accept()
@@ -787,6 +795,9 @@ class ThumbnailView(QListWidget):
         is_folder = item.data(ROLE_IS_FOLDER)
         menu = QMenu(self)
         self._add_sort_menu(menu)
+        if not is_folder and is_image_file(file_path):
+            menu.addAction('Images similaires sur Yandex et Google Lens (S)').triggered.connect(
+                lambda: search_similar_images(file_path))
         menu.addAction('Nouveau dossier…').triggered.connect(self._create_folder)
         if not is_folder:
             menu.addAction('Copier (Ctrl+C)').triggered.connect(self.copy_selected)

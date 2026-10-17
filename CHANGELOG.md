@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 2.10
+
+- Correction du fond noir hérité par les boîtes de dialogue de la visionneuse : le nom saisi, le libellé et les boutons du renommage F2 restent lisibles dans les deux thèmes, en plein écran et en fenêtre flottante.
+- Recherche d’images similaires par S dans la grille, la visionneuse flottante et le plein écran. Un clic droit dans la visionneuse lance directement la recherche ; le menu de la grille contient également la commande pour l’image cliquée.
+- Envoi direct et indépendant d’un aperçu JPEG sans EXIF (1600 pixels maximum de côté) à Yandex.com et Google Lens, en arrière-plan. Ouverture de deux pages de résultats dans le navigateur par défaut ; signalement des erreurs sans bloquer la consultation. Aucun hébergeur tiers, aucune modification de l’original. La recherche utilise le fichier enregistré ; Ctrl+S reste disponible pour enregistrer les retouches.
+- Nouvelle distribution Windows portable complète et empreinte SHA-256 ; préférences personnelles exclues de l’archive GitHub.
+
 ## 2.9
 
 - Favoris : le clic droit propose l’ouverture du dossier dans l’Explorateur Windows.

@@ -35,6 +35,7 @@ from src.ui.crop_overlay import CropOverlayItem
 from src.utils.file_ops import crop_image, trash_image, restore_last_deleted, rename_images
 from src.ui.blur_tool import BlurSelection, blurred_regions, save_blurs
 from src.utils.windows_integration import reveal_in_explorer
+from src.utils.image_search import search_similar_images
 from PIL import Image, ImageOps
 import pillow_heif
 pillow_heif.register_heif_opener()
@@ -178,6 +179,7 @@ class FullscreenGraphicsView(QGraphicsView):
                 event.accept()
                 return
         if event.button() == Qt.MouseButton.RightButton:
+            self.viewer.search_current_image()
             self.viewer._show_hud()
             event.accept()
             return
@@ -187,7 +189,11 @@ class FullscreenGraphicsView(QGraphicsView):
         self.viewer.wheelEvent(event)
 
     def contextMenuEvent(self, event):
-        self.viewer._show_hud()
+        # Mouse searches are handled on press; keyboard context-menu requests
+        # arrive here without a mouse press.
+        if event.reason() == event.Reason.Keyboard:
+            self.viewer.search_current_image()
+            self.viewer._show_hud()
         event.accept()
 
 
@@ -216,7 +222,8 @@ class FullscreenImageViewer(QWidget):
         if floating:
             self.setMinimumSize(64, 64)
         self._wheel_remainder = 0
-        self.setStyleSheet("background-color: #000000;")
+        self.setObjectName('imageViewer')
+        self.setStyleSheet('QWidget#imageViewer { background-color: #000000; }')
 
         self.image_list: list[str] = []
         self.current_index: int = -1
@@ -680,6 +687,11 @@ class FullscreenImageViewer(QWidget):
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, 'Renommage impossible', str(error))
 
+    def search_current_image(self):
+        if 0 <= self.current_index < len(self.image_list):
+            search_similar_images(self.image_list[self.current_index])
+            self.show_message('Recherche sur Yandex et Google Lens…', 2500)
+
     def reveal_current_image(self):
         if 0 <= self.current_index < len(self.image_list):
             reveal_in_explorer(self.image_list[self.current_index])
@@ -1078,6 +1090,11 @@ class FullscreenImageViewer(QWidget):
 
     def keyPressEvent(self, event):
         key = event.key()
+        if key == Qt.Key.Key_S and not event.modifiers():
+            if not event.isAutoRepeat():
+                self.search_current_image()
+            event.accept()
+            return
         if key == Qt.Key.Key_H and not event.modifiers():
             if not event.isAutoRepeat(): self.mirror_image()
             event.accept()

@@ -63,7 +63,9 @@ class FeaturesV12(unittest.TestCase):
         self.assertFalse(viewer.hud.isVisible())
         viewer.rotate_image(90)
         self.assertFalse(viewer.hud.isVisible())
-        QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(50, 60))
+        with patch('src.ui.fullscreen_viewer.search_similar_images') as search:
+            QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(50, 60))
+            search.assert_called_once_with(str(self.path))
         self.assertTrue(viewer.hud.isVisible())
         viewer.next_image()
         self.assertFalse(viewer.hud.isVisible())

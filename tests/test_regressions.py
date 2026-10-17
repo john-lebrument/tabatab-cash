@@ -126,12 +126,15 @@ class RegressionTests(unittest.TestCase):
         self.widgets.append(viewer)
         viewer.show_images([str(self.path)], str(self.path))
         viewer.hud.hide()
-        QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
+        with patch('src.ui.fullscreen_viewer.search_similar_images') as search:
+            QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
+            search.assert_called_once_with(str(self.path))
         self.assertTrue(viewer.hud.isVisible())
         QTest.mouseClick(viewer.btn_crop, Qt.MouseButton.LeftButton)
         self.assertTrue(viewer.crop_mode)
         viewer.hud.hide()
-        QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
+        with patch('src.ui.fullscreen_viewer.search_similar_images'):
+            QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
         self.assertTrue(viewer.hud.isVisible())
         self.assertTrue(viewer.crop_mode)
 

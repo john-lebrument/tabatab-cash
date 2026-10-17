@@ -1,8 +1,15 @@
-# TABaTAB Cash — version 2.9
+# TABaTAB Cash — version 2.10
 
 Visionneuse et explorateur d’images Windows portable avec onglets, favoris, navigation plein écran et outils de retouche.
 
 **[Télécharger la dernière version Windows](https://github.com/john-lebrument/tabatab-cash/releases/latest)** · **[Historique des versions et nouveautés](CHANGELOG.md)**
+
+## Nouveautés 2.10
+
+- Le renommage par F2 reste lisible en plein écran et en fenêtre flottante, avec les thèmes clair et sombre. Le fond noir de l’image ne se propage plus aux boîtes de dialogue.
+- **Images similaires (S)** : recherche de la photo courante sur Yandex.com et Google Lens, en ouvrant deux pages de résultats dans le navigateur par défaut. Disponible dans la grille, en plein écran et en fenêtre flottante. Ctrl+S conserve sa fonction d’enregistrement.
+- En plein écran et en fenêtre flottante, un clic droit lance directement les deux recherches. Dans la grille, le menu contextuel propose « Images similaires sur Yandex et Google Lens (S) » pour l’image cliquée.
+- Une copie JPEG de recherche, limitée à 1600 pixels de côté et sans métadonnées EXIF, est envoyée directement à chaque moteur lorsque la commande est utilisée. Le fichier original reste intact ; la recherche porte sur le fichier enregistré. Internet est nécessaire. Les envois sont indépendants et effectués en arrière-plan ; les erreurs réseau sont signalées. Le navigateur choisit l’ouverture en fenêtres ou en onglets selon ses réglages.
 
 ## Nouveautés 2.9
 
@@ -66,6 +73,7 @@ Décompresser l’archive complète, puis lancer `TABaTAB Cash.exe` dans son dos
 | F | Flou |
 | L / R | Rotation gauche / droite |
 | H | Miroir horizontal gauche-droite |
+| S / clic droit dans la visionneuse | Rechercher l’image sur Yandex.com et Google Lens |
 | Ctrl+S | Enregistrer une rotation |
 | Suppr / Maj+Suppr | Corbeille / suppression définitive |
 | Ctrl+Z | Restaurer la dernière image supprimée pendant la session |
@@ -74,7 +82,7 @@ Le zoom affiché est relatif à l’image ajustée à l’écran : 100 % au dép
 
 ## Historique
 
-Les nouveautés de **2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
+Les nouveautés de **2.10, 2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
 
 ## Développement et compilation
 
