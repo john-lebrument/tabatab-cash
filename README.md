@@ -1,8 +1,14 @@
-# TABaTAB Cash — version 2.10
+# TABaTAB Cash — version 2.11
 
 Visionneuse et explorateur d’images Windows portable avec onglets, favoris, navigation plein écran et outils de retouche.
 
 **[Télécharger la dernière version Windows](https://github.com/john-lebrument/tabatab-cash/releases/latest)** · **[Historique des versions et nouveautés](CHANGELOG.md)**
+
+## Nouveautés 2.11
+
+- **Google Lens corrigé** : l’image est envoyée par le navigateur par défaut, qui conserve la session d’importation et affiche les résultats. L’application ne lui transmet plus une adresse de résultats issue d’une session Python distincte, cause du message « Recherche visuelle expirée » en 2.10.
+- **Clic droit en plein écran ou en fenêtre flottante** : ouvre uniquement les outils. Utiliser le bouton « Images similaires (S) » pour rechercher sur Yandex.com et Google Lens. Dans les petites fenêtres flottantes, cette commande figure dans le menu contextuel. La touche **S** lance toujours directement la recherche ; **Ctrl+S** conserve sa fonction d’enregistrement.
+- L’aperçu JPEG sans EXIF est transmis au navigateur par une page temporaire sur `127.0.0.1`, puis envoyé directement à Google Lens. Cette page ne donne accès à aucun dossier : elle contient uniquement l’aperçu de la recherche, reste disponible dix minutes et nécessite que TABaTAB reste ouvert jusqu’à l’envoi. Aucun fichier de transfert n’est écrit sur disque. Yandex conserve son envoi en arrière-plan.
 
 ## Nouveautés 2.10
 
@@ -73,7 +79,8 @@ Décompresser l’archive complète, puis lancer `TABaTAB Cash.exe` dans son dos
 | F | Flou |
 | L / R | Rotation gauche / droite |
 | H | Miroir horizontal gauche-droite |
-| S / clic droit dans la visionneuse | Rechercher l’image sur Yandex.com et Google Lens |
+| S | Rechercher l’image sur Yandex.com et Google Lens |
+| Clic droit dans la visionneuse | Ouvrir les outils, dont « Images similaires (S) » |
 | Ctrl+S | Enregistrer une rotation |
 | Suppr / Maj+Suppr | Corbeille / suppression définitive |
 | Ctrl+Z | Restaurer la dernière image supprimée pendant la session |
@@ -82,7 +89,7 @@ Le zoom affiché est relatif à l’image ajustée à l’écran : 100 % au dép
 
 ## Historique
 
-Les nouveautés de **2.10, 2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
+Les nouveautés de **2.11, 2.10, 2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0 et 1.9**, puis celles de **1.8 à 1.4** et les fonctionnalités documentées des premières versions figurent dans [CHANGELOG.md](CHANGELOG.md). Les attributions incertaines avant 1.4 sont signalées.
 
 ## Développement et compilation
 

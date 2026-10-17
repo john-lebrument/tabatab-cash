@@ -1,3 +1,3 @@
 APP_NAME = 'TABaTAB Cash'
-APP_VERSION = '2.10'
+APP_VERSION = '2.11'
 APP_TITLE = f'{APP_NAME} — version {APP_VERSION}'

@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.11
+
+- Correction de Google Lens : l’envoi multipart de l’aperçu JPEG est effectué dans le navigateur par défaut, afin de conserver sa session. Le transfert de la seule URL de résultats depuis Python provoquait « Recherche visuelle expirée » en 2.10.
+- Le clic droit dans la visionneuse ouvre uniquement les outils, sans envoi d’image ni ouverture du navigateur. Ajout du bouton « Images similaires (S) » à la barre d’outils et de la commande correspondante au menu des petites fenêtres flottantes. S reste un raccourci direct ; Ctrl+S reste réservé à l’enregistrement.
+- Transmission de l’aperçu à Google via une page temporaire en mémoire sur l’interface locale 127.0.0.1, avec adresse aléatoire et expiration de dix minutes. Aucun accès aux dossiers ni fichier de transfert sur disque. Envoi Yandex inchangé.
+
 ## 2.10
 
 - Correction du fond noir hérité par les boîtes de dialogue de la visionneuse : le nom saisi, le libellé et les boutons du renommage F2 restent lisibles dans les deux thèmes, en plein écran et en fenêtre flottante.

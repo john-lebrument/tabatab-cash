@@ -58,18 +58,12 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(parse_qs(urlparse(result).query)['cbir_id'], ['123/image'])
         self.assertEqual(request.call_args.kwargs['timeout'], 30)
 
-    def test_google_upload_requires_image_results(self):
-        response = MagicMock()
-        response.geturl.return_value = 'https://www.google.com/search?vsrid=photo&udm=26'
-        with patch('src.utils.image_search.urlopen') as request:
-            request.return_value.__enter__.return_value = response
-            self.assertIn('vsrid=photo', upload_image('Google Lens', b'JPEG preview'))
-            self.assertIn(b'name="encoded_image"', request.call_args.args[0].data)
-            for invalid in ('https://search.google/ways-to-search/lens/',
-                            'https://www.google.com/', 'https://example.org/search'):
-                response.geturl.return_value = invalid
-                with self.assertRaises(ValueError):
-                    upload_image('Google Lens', b'JPEG preview')
+    def test_google_upload_is_performed_in_browser_session(self):
+        with patch('src.utils.image_search.google_browser_upload', return_value='http://127.0.0.1:1234/token') as browser, \
+                patch('src.utils.image_search.urlopen') as request:
+            self.assertEqual(upload_image('Google Lens', b'JPEG preview'), 'http://127.0.0.1:1234/token')
+            browser.assert_called_once_with(b'JPEG preview')
+            request.assert_not_called()
 
     def test_job_searches_both_engines_even_if_one_fails(self):
         job = ImageSearchJob('local.png')
@@ -96,7 +90,7 @@ class FeaturesV210(unittest.TestCase):
     tearDown = test_v14.NewBehaviors.tearDown
     viewer = test_v14.NewBehaviors.viewer
 
-    def test_s_right_click_and_keyboard_menu_search_once_in_both_viewers(self):
+    def test_s_searches_and_right_click_only_opens_tools_in_both_viewers(self):
         for floating in (False, True):
             viewer = self.viewer() if not floating else FullscreenImageViewer(self.window, floating=True)
             if floating:
@@ -108,11 +102,12 @@ class FeaturesV210(unittest.TestCase):
                 search.assert_called_once_with(path)
                 search.reset_mock()
                 QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
-                # The native context event following a mouse click must not upload again.
+                # Opening tools never uploads, including the following native context event.
                 viewer.view.contextMenuEvent(QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(20, 20)))
-                search.assert_called_once_with(path)
-                search.reset_mock()
+                search.assert_not_called()
                 viewer.view.contextMenuEvent(QContextMenuEvent(QContextMenuEvent.Reason.Keyboard, QPoint(20, 20)))
+                search.assert_not_called()
+                viewer.btn_search.click()
                 search.assert_called_once_with(path)
                 search.reset_mock()
                 with patch.object(viewer, 'save_rotated_image') as save:

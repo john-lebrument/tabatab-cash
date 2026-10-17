@@ -65,7 +65,7 @@ class FeaturesV12(unittest.TestCase):
         self.assertFalse(viewer.hud.isVisible())
         with patch('src.ui.fullscreen_viewer.search_similar_images') as search:
             QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(50, 60))
-            search.assert_called_once_with(str(self.path))
+            search.assert_not_called()
         self.assertTrue(viewer.hud.isVisible())
         viewer.next_image()
         self.assertFalse(viewer.hud.isVisible())

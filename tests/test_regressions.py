@@ -128,7 +128,7 @@ class RegressionTests(unittest.TestCase):
         viewer.hud.hide()
         with patch('src.ui.fullscreen_viewer.search_similar_images') as search:
             QTest.mouseClick(viewer.view.viewport(), Qt.MouseButton.RightButton, pos=QPoint(20, 20))
-            search.assert_called_once_with(str(self.path))
+            search.assert_not_called()
         self.assertTrue(viewer.hud.isVisible())
         QTest.mouseClick(viewer.btn_crop, Qt.MouseButton.LeftButton)
         self.assertTrue(viewer.crop_mode)

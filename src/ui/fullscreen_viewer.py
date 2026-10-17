@@ -179,7 +179,6 @@ class FullscreenGraphicsView(QGraphicsView):
                 event.accept()
                 return
         if event.button() == Qt.MouseButton.RightButton:
-            self.viewer.search_current_image()
             self.viewer._show_hud()
             event.accept()
             return
@@ -192,7 +191,6 @@ class FullscreenGraphicsView(QGraphicsView):
         # Mouse searches are handled on press; keyboard context-menu requests
         # arrive here without a mouse press.
         if event.reason() == event.Reason.Keyboard:
-            self.viewer.search_current_image()
             self.viewer._show_hud()
         event.accept()
 
@@ -374,6 +372,10 @@ class FullscreenImageViewer(QWidget):
         self.btn_blur = QPushButton('Flouter (F)', self.hud)
         self.btn_blur.clicked.connect(self.start_blur)
         hud_layout.addWidget(self.btn_blur)
+        self.btn_search = QPushButton('Images similaires (S)', self.hud)
+        self.btn_search.setToolTip('Rechercher sur Yandex.com et Google Lens')
+        self.btn_search.clicked.connect(self.search_current_image)
+        hud_layout.addWidget(self.btn_search)
 
         self.btn_crop_apply = QPushButton("✔ Valider Recadrage", self.hud)
         self.btn_crop_apply.setStyleSheet("background-color: #0078d4; font-weight: bold;")
@@ -1261,6 +1263,7 @@ class FullscreenImageViewer(QWidget):
             # Keep every control accessible in small borderless image windows.
             from PyQt6.QtWidgets import QMenu
             menu = QMenu(self)
+            menu.addAction('Images similaires sur Yandex et Google Lens (S)').triggered.connect(self.search_current_image)
             menu.addAction("Afficher dans l'explorateur Windows").triggered.connect(self.reveal_current_image)
             for label, action in [('Précédente ←', self.prev_image), ('Suivante →', self.next_image),
                                   ('Zoom +', self.zoom_in), ('Zoom −', self.zoom_out),

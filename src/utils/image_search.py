@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 import json
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -13,6 +13,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.utils.file_ops import is_image_file
+from src.utils.browser_upload import google_browser_upload, close_browser_uploads
 
 
 USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -35,7 +36,9 @@ def image_preview(path):
 
 
 def upload_image(engine, preview):
-    """Return a results URL, never a generic landing page after a failed upload."""
+    """Yandex results URL or a browser-side upload page for Google Lens."""
+    if engine == 'Google Lens':
+        return google_browser_upload(preview)
     boundary = 'TABaTAB' + uuid4().hex
     if engine == 'Yandex':
         field = 'upfile'
@@ -43,9 +46,6 @@ def upload_image(engine, preview):
             'rpt': 'imageview', 'format': 'json',
             'request': json.dumps({'blocks': [{'block': 'cbir-uploader__get-cbir-id'}]}),
         })
-    elif engine == 'Google Lens':
-        field = 'encoded_image'
-        url = 'https://lens.google.com/upload?hl=fr'
     else:
         raise ValueError('Moteur de recherche inconnu.')
     body = (f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; '
@@ -65,13 +65,6 @@ def upload_image(engine, preview):
                 'rpt': 'imageview', 'cbir_id': params['cbirId'],
                 'url': params.get('originalImageUrl', ''),
             })
-        result = response.geturl()
-        parsed = urlparse(result)
-        if (parsed.scheme != 'https' or parsed.hostname not in
-                ('www.google.com', 'google.com', 'lens.google.com') or
-                parsed.path not in ('/search', '/sorry/index', '/sorry/')):
-            raise ValueError('Google Lens n’a pas retourné de résultats pour cette image.')
-        return result
 
 
 class SearchSignals(QObject):
@@ -110,6 +103,7 @@ class ImageSearchController(QObject):
         self.jobs = {}
         self.errors = []
         self.dialog = None
+        parent.aboutToQuit.connect(close_browser_uploads)
 
     def start(self, path):
         path = str(Path(path).absolute())
